@@ -23,7 +23,7 @@ TODO: call this to rotate credentials? for example:
 
 
 input CSV must have these columns: name, email, iam-username
-output CSV looks like: name, email, IAM username, pass/fail message"""
+output CSV looks like: name, email, iam-username, message"""
 
 def ensure(b, m, retcode=1):
     if not b:
@@ -75,7 +75,21 @@ def update_iam_user(user_csvrow):
         # ideal state
         # we have 1 active key
         # we have 0 or 1 inactive keys
-        
+
+        [key.delete() for key in inactive_keys]
+
+        # precisely 1 active key now
+
+        # TODO: only create keypair if current active keypair is older than N days
+        # ensure(active_keys[0].create_date > threshold, "active credentials are new enough")
+    
+        # create the new credential
+        kp = iamuser.create_access_key_pair()
+
+        # we need a copy to post to a gist
+        # capture here otherwise we can't access secret_key again
+        kp = (kp.access_key_id, kp.secret_access_key)
+
         #k1 = access_keys[0]
         #print(k1.access_key_id)
         #print(k1.create_date)
@@ -84,6 +98,7 @@ def update_iam_user(user_csvrow):
         return {
             'success?': True,
             'original-row': user_csvrow,
+            'new-credentials': kp,
         }
     except AssertionError as err:
         return {
