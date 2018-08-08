@@ -1,28 +1,9 @@
 import boto3
+from datetime import datetime, timezone
+#from dateutil import parser as date_parser
 import sys, os, csv
 
-"""Flow:
-
-you: generate csv report
-you: filter to just those users to receive new credentials automatically
-you: call me with ./update-iam-users.sh csvfile
- me: for each user in your csv file
- me: fail user if two active sets of credentials
- me: fail user if no credentials (we are *updating existing* access, not *creating new*)
- me: remove any disabled/inactive credentials
- me: disable any remaining credentials
- me: create new credentials
- me: create a new secret GIST with the credentials
- me: send emails to all affected users
- me: write csv report
-
-
-TODO: call this to rotate credentials? for example:
-* first call creates new set of credentials, writes gist, sends email
-* second call checks last-used-by and if beyond a threshold (7 days?) disables the oldest created
-
-
-input CSV must have these columns: name, email, iam-username
+"""input CSV must have these columns: name, email, iam-username
 output CSV looks like: name, email, iam-username, message"""
 
 def ensure(b, m, retcode=1):
@@ -38,10 +19,39 @@ def splitfilter(fn, lst):
     return group_a, group_b
 
 lmap = lambda fn, lst: list(map(fn, lst))
+lfilter = lambda fn, lst: list(filter(fn, lst))
 
 def spy(val):
     print('spying: %s' % val)
     return val
+
+
+# states
+
+UNKNOWN = '?'
+
+IDEAL = 'ideal'
+GRACE_PERIOD = 'in-grace-period'
+
+ALL_CREDENTIALS_ACTIVE = 'all-credentials-active'
+NO_CREDENTIALS_ACTIVE = 'no-credentials-active'
+OLD_CREDENTIALS = 'old-credentials'
+NO_CREDENTIALS = 'no-credentials'
+
+MANY_CREDENTIALS = 'many-credentials'
+
+STATE_DESCRIPTIONS = {
+    IDEAL: "1 active set of credentials younger than max age of credentials",
+    GRACE_PERIOD: "two active sets of credentials, one set created in the last $grace-period days",
+    ALL_CREDENTIALS_ACTIVE: "two active sets of credentials, both sets older than $grace-period days",
+    NO_CREDENTIALS_ACTIVE: "credentials present but none are active",
+    OLD_CREDENTIALS: "credentials are old and will be rotated",
+    NO_CREDENTIALS: "no credentials exist",
+
+    # bad states
+    MANY_CREDENTIALS: "more than 2 sets of credentials exist (program error)",
+    UNKNOWN: "credentials are in an unhandled state (program error)"
+}
 
 #
 #
@@ -59,55 +69,86 @@ def read_input(user_csvpath):
         ensure(header == INPUT_HEADER, "csv file has incorrect header: %s" % header)
         return retval
 
-def update_iam_user(user_csvrow):
+def delete_key(key):
+    #key.delete()
+    pass
+
+def key_list(iamuser):
+    iamuser.load() # also re-loads
+    return list(iamuser.access_keys.all())
+
+def create_date(key):
+    # key.create_date ll: 2013-01-15 15:15:57+00:00
+    #return date_parser.parse(key.create_date)
+    return key.create_date # turns out this is already parsed
+
+def update_iam_user(user_csvrow, max_key_age=90, grace_period_days=7):
     try:
+        today = datetime.now(tz=timezone.utc)
+        state = UNKNOWN
+        actions = []
+
         iam = boto3.resource('iam')
         iamuser = iam.User(user_csvrow['iam-username'])
-        iamuser.load() # urgh
 
-        access_keys = list(iamuser.access_keys.all())
-        ensure(len(access_keys) > 0, "no access keys to rotate")
+        access_keys = key_list(iamuser)
+        ensure(len(access_keys) > 0, NO_CREDENTIALS)
+        ensure(len(access_keys) < 3, MANY_CREDENTIALS) # there must only ever be 0, 1 or 2 keys
 
         active_keys, inactive_keys = splitfilter(lambda key: key.status != 'Inactive', access_keys)
-        ensure(active_keys, "no *active* keys to rotate")
-        ensure(len(active_keys) == 1, "more than one active key")
+        ensure(active_keys, NO_CREDENTIALS_ACTIVE)
 
-        # ideal state
-        # we have 1 active key
-        # we have 0 or 1 inactive keys
+        if len(active_keys) > 1:
+            state = ALL_CREDENTIALS_ACTIVE
+            # we have two active keys
+            # * user is possibly using both sets, which is no longer supported, or
+            # * user was granted a new set of credentials by this script
+            newest_key, oldest_key = sorted(active_keys, key=create_date)
+            if (today - create_date(newest_key)) > grace_period_days:
+                # grace period is over
+                # mark the oldest of the two active keys as inactive
+                inactive_keys.append(oldest_key)
+                active_keys.remove(oldest_key)
 
-        [key.delete() for key in inactive_keys]
+        # always prune inactive keys
+        [actions.append({'delete': key.access_key_id}) for key in inactive_keys]
 
-        # precisely 1 active key now
+        # state: 1 or 2 active keys. no inactive keys.
 
-        # TODO: only create keypair if current active keypair is older than N days
-        # ensure(active_keys[0].create_date > threshold, "active credentials are new enough")
-    
-        # create the new credential
-        kp = iamuser.create_access_key_pair()
+        if len(active_keys) > 1:
+            # transition period, nothing else to do until grace period expires
+            state = GRACE_PERIOD
 
-        # we need a copy to post to a gist
-        # capture here otherwise we can't access secret_key again
-        kp = (kp.access_key_id, kp.secret_access_key)
+        else:
+            # 1 active key
+            active_key = active_keys[0]
+            then = create_date(active_key)
+            if (today - then).days > max_key_age:
+                # remaining key is too old
+                state = OLD_CREDENTIALS
+                actions.append({'disable': active_key.access_key_id, 'create': 'new'})
+            else:
+                state = IDEAL
 
-        #k1 = access_keys[0]
-        #print(k1.access_key_id)
-        #print(k1.create_date)
-        #print(k1.status)
-        
         return {
             'success?': True,
+            'state': state,
+            'reason': STATE_DESCRIPTIONS[state],
             'original-row': user_csvrow,
-            'new-credentials': kp,
+            'actions': actions,
         }
     except AssertionError as err:
+        state = str(err)
         return {
             'success?': False,
-            'reason': str(err)
+            'state': state,
+            'reason': STATE_DESCRIPTIONS[state],
+            'original-row': user_csvrow,
+            'actions': []
         }
 
 def write_report(passes, fails):
-    print('results',passes,fails)
+    print('passes:',passes,'fails:',fails)
     return '/path/to/report.csv'
 
 def main(user_csvpath):
@@ -124,6 +165,6 @@ if __name__ == '__main__':
         user_csvpath = args[0]
         sys.exit(main(user_csvpath))
     except AssertionError as err:
-        print(err)
+        print('err:',err)
         retcode = getattr(err, 'retcode', 1)
         sys.exit(retcode)
