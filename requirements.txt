@@ -1,0 +1,5 @@
+boto3==1.7.70
+pyflakes==2.0.0
+pylint==2.1.1
+pytest==3.7.1
+python-dateutil==2.7.3
