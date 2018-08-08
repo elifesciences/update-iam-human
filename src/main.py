@@ -83,7 +83,7 @@ def create_date(key):
     #return date_parser.parse(key.create_date)
     return key.create_date # turns out this is already parsed
 
-def update_iam_user(user_csvrow, max_key_age=90, grace_period_days=7):
+def update_iam_user(user_csvrow, max_key_age, grace_period_days):
     try:
         today = datetime.now(tz=timezone.utc)
         state = UNKNOWN
@@ -105,7 +105,7 @@ def update_iam_user(user_csvrow, max_key_age=90, grace_period_days=7):
             # * user is possibly using both sets, which is no longer supported, or
             # * user was granted a new set of credentials by this script
             newest_key, oldest_key = sorted(active_keys, key=create_date)
-            if (today - create_date(newest_key)) > grace_period_days:
+            if (today - create_date(newest_key)).days > grace_period_days:
                 # grace period is over
                 # mark the oldest of the two active keys as inactive
                 inactive_keys.append(oldest_key)
@@ -123,8 +123,7 @@ def update_iam_user(user_csvrow, max_key_age=90, grace_period_days=7):
         else:
             # 1 active key
             active_key = active_keys[0]
-            then = create_date(active_key)
-            if (today - then).days > max_key_age:
+            if (today - create_date(active_key)).days > max_key_age:
                 # remaining key is too old
                 state = OLD_CREDENTIALS
                 actions += [
@@ -158,9 +157,11 @@ def write_report(passes, fails):
     json.dump(report, open(path, 'w'), indent=4)
     return path
 
-def main(user_csvpath):
+def main(user_csvpath, max_key_age=90, grace_period_days=7):
     csv_contents = read_input(user_csvpath)
-    results = lmap(update_iam_user, csv_contents)
+    max_key_age = int(max_key_age)
+    grace_period_days = int(grace_period_days)
+    results = [update_iam_user(row, max_key_age, grace_period_days) for row in csv_contents]
     pass_rows, fail_rows = splitfilter(lambda row: row['success?'], results)
     print('wrote: ', write_report(pass_rows, fail_rows))
     return len(fail_rows)
@@ -168,9 +169,10 @@ def main(user_csvpath):
 if __name__ == '__main__':
     try:
         args = sys.argv[1:]
-        ensure(len(args) == 1, "exactly one argument required: path-to-csvfile")
-        user_csvpath = args[0]
-        sys.exit(main(user_csvpath))
+        arglst = ['user_csvpath', 'max_key_age', 'grace_period_days']
+        ensure(len(args) > 0, "at least one argument required: path-to-csvfile")
+        kwargs = dict(zip(arglst, args))
+        sys.exit(main(**kwargs))
     except AssertionError as err:
         print('err:',err)
         retcode = getattr(err, 'retcode', 1)
