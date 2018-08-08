@@ -1,4 +1,5 @@
 import boto3
+import json
 from datetime import datetime, timezone
 #from dateutil import parser as date_parser
 import sys, os, csv
@@ -126,7 +127,10 @@ def update_iam_user(user_csvrow, max_key_age=90, grace_period_days=7):
             if (today - then).days > max_key_age:
                 # remaining key is too old
                 state = OLD_CREDENTIALS
-                actions.append({'disable': active_key.access_key_id, 'create': 'new'})
+                actions += [
+                    {'disable': active_key.access_key_id},
+                    {'create': 'new'}
+                ]
             else:
                 state = IDEAL
 
@@ -148,8 +152,11 @@ def update_iam_user(user_csvrow, max_key_age=90, grace_period_days=7):
         }
 
 def write_report(passes, fails):
-    print('passes:',passes,'fails:',fails)
-    return '/path/to/report.csv'
+    report = {'passes': passes, 'fails': fails}
+    path = 'report.json'
+    print(json.dumps(report, indent=4))
+    json.dump(report, open(path, 'w'), indent=4)
+    return path
 
 def main(user_csvpath):
     csv_contents = read_input(user_csvpath)
