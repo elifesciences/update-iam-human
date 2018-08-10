@@ -5,6 +5,8 @@ import sys, os, csv
 from github import Github
 from github.InputFileContent import InputFileContent
 import json
+import smtplib
+from email.message import EmailMessage
 
 """input CSV must have these columns: name, email, iam-username
 output CSV looks like: name, email, iam-username, message"""
@@ -86,9 +88,12 @@ def create_date(key):
     #return date_parser.parse(key.create_date)
     return key.create_date # turns out this is already parsed
 
+def utcnow():
+    return datetime.now(tz=timezone.utc)
+
 def user_report(user_csvrow, max_key_age, grace_period_days):
     try:
-        today = datetime.now(tz=timezone.utc)
+        today = utcnow()
         state = UNKNOWN
         actions = []
 
@@ -191,7 +196,17 @@ def execute_report(report_data):
 # aws gist
 #
 
-def aws_create_gist(authenticated_user, user_csvrow):
+def aws_credentials():
+    return json.load(open('private.json', 'r'))
+
+def aws_user():
+    "returns a user that can create gists"
+    credentials = aws_credentials()
+    gh = Github(credentials['key'])
+    return gh.get_user()
+
+def aws_create_gist(user_csvrow):
+    authenticated_user = aws_user()
     public = False
     description = "new AWS API credentials"
     content = '''Hello, {insert-name-of-human}
@@ -205,7 +220,8 @@ Your old credentials and this message will expire on {insert-expiry-date}.'''
     content = content.format({
         'insert-name-of-human': user_csvrow['name'],
         'insert-access-key': user_csvrow['aws-access-key'],
-        'insert-secret-key': user_csvrow['aws-secret-key']
+        'insert-secret-key': user_csvrow['aws-secret-key'],
+        'insert-expiry-date': user_csvrow['aws-old-key-expiry-date']
     })
     content = InputFileContent(content)
     gist = authenticated_user.create_gist(public, {'content': content}, description)
@@ -216,25 +232,63 @@ Your old credentials and this message will expire on {insert-expiry-date}.'''
     })
     return user_csvrow
 
-def aws_credentials():
-    return json.load(open('private.json', 'r'))
-
-def aws_user():
-    "returns a user that can create gists"
-    credentials = aws_credentials()
-    gh = Github(credentials['key'])
-    return gh.get_user()
-
 
 #
 # email
 #
 
-def notify_user(user_report_result):
-    # pseudo code
-    gist = aws_create_gist(user_report_result)
-    name, email = vals(user_report_result, 'name', 'email')
-    #send_email(name, email, gist)
+def notify_user(user_csvrow):
+    user_csvrow = aws_create_gist(user_csvrow)
+    name, email_to = vals(user_csvrow, 'name', 'email')
+    email_from = 'it-admin@elifesciences.org'
+    subject = 'Replacement AWS credentials'
+    content = '''Hello {insert-name-of-human},
+
+Your AWS credentials are being rotated. 
+
+This means a new set of credentials has been created for you and your 
+old credentials ({insert-old-key-id}) will be removed after the grace 
+period ({insert-expiry-date} days).
+
+Your new set of credentials can be found here:
+{insert-gist-url}
+
+Please contact it-admin@elifesciences.org if you have any concerns.'''
+    content = content.format_map({
+        'insert-name-of-human': user_csvrow['name'],
+        'insert-old-key-id': user_csvrow['old-key-id'],
+        'insert-expiry-date': user_csvrow['aws-old-key-expiry-date'],
+        'insert-gist-url': user_csvrow['gist-html-url']
+    })
+
+    # build an email message then send it
+    # stolen directly from: https://docs.python.org/3/library/email.examples.html
+    msg = EmailMessage()
+    msg.set_content(content)
+    msg['Subject'] = subject
+    msg['From'] = email_from
+    msg['To'] = email_to
+
+    # https://docs.python.org/3/library/smtplib.html#smtplib.SMTP
+    email_host = 'smtp.google.com'
+    email_user = 'foo'
+    email_pass = 'bar'
+    email_port_tls, email_port_ssl = 587, 465
+
+    # or is it TLS?
+    with smtplib.SMTP_SSL(email_host, email_port_ssl) as smtp:
+        smtp.login(email_user, email_pass)
+        smtp.send_message(msg)
+
+    # done :)
+    
+    user_csvrow.update({
+        'email-sent': utcnow(),
+    })
+    return user_csvrow
+    
+    
+    
 
 def notify(report_results):
     pass
