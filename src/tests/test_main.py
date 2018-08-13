@@ -44,6 +44,24 @@ def test_rotate_very_old_credentials():
     ]
     assert expected_actions == future_csv_row['actions']
 
+def test_multiple_active_credentials():
+    """multiple active credentials no longer supported, the oldest will be disabled after a grace period. 
+    max key age on youngest is ignored for simplicity"""
+    # note: only exeter match this case and they are being handled separately
+    test_csv_row = {'iam-username': 'FooBar'}
+    two_days_ago = main.utcnow() - timedelta(days=2)
+    three_days_ago = main.utcnow() - timedelta(days=3)
+    max_key_age, grace_period = 90, 7
+    key_list = [
+        {'access_key_id': 'AKIA-DUMMY1', 'create_date': three_days_ago, 'status': 'Active'},
+        {'access_key_id': 'AKIA-DUMMY2', 'create_date': two_days_ago, 'status': 'Active'}
+    ]
+    with patch('src.main.key_list', return_value=key_list):
+        updated_csv_row = main.user_report(test_csv_row, max_key_age, grace_period)
+    expected_actions = [] # nothing to do
+    assert expected_actions == updated_csv_row['actions']
+    assert main.GRACE_PERIOD == updated_csv_row['state']
+
 def test_delete_single_inactive_credential():
     "any disabled credentials will be deleted"
     test_csv_row = {'iam-username': 'FooBar'}
