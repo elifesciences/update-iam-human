@@ -31,7 +31,7 @@ def test_rotate_very_old_credentials():
     ]
     assert expected_actions == updated_csv_row['actions']
 
-    # assume the report is exected and that new key for this user is created,
+    # assume the report is executed and that new key for this user is created,
     # zip forward $grace-period + 1 days and run the report again
     a_graceperiod_from_now = today + timedelta(days=grace_period + 1)
     key_list.append({'access_key_id': 'AKIA-DUMMY2', 'create_date': today, 'status': 'Active'})
