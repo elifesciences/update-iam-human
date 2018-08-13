@@ -44,7 +44,7 @@ def test_rotate_very_old_credentials():
     ]
     assert expected_actions == future_csv_row['actions']
 
-def test_delete_inactive_credentials():
+def test_delete_single_inactive_credential():
     "any disabled credentials will be deleted"
     test_csv_row = {'iam-username': 'FooBar'}
     two_days_ago = main.utcnow() - timedelta(days=2)
@@ -54,3 +54,19 @@ def test_delete_inactive_credentials():
         updated_csv_row = main.user_report(test_csv_row, max_key_age, grace_period)
     expected_actions = [('delete', 'AKIA-DUMMY')]
     assert expected_actions == updated_csv_row['actions']
+    assert main.NO_CREDENTIALS_ACTIVE == updated_csv_row['state']
+
+def test_delete_multiple_inactive_credentials():
+    "any disabled credentials will be deleted"
+    test_csv_row = {'iam-username': 'FooBar'}
+    two_days_ago, two_months_ago = main.utcnow() - timedelta(days=2), main.utcnow() - timedelta(days=28*2)
+    max_key_age, grace_period = 90, 7
+    key_list = [
+        {'access_key_id': 'AKIA-DUMMY1', 'create_date': two_days_ago, 'status': 'Inactive'},
+        {'access_key_id': 'AKIA-DUMMY2', 'create_date': two_months_ago, 'status': 'Inactive'}
+    ]
+    with patch('src.main.key_list', return_value=key_list):
+        updated_csv_row = main.user_report(test_csv_row, max_key_age, grace_period)
+    expected_actions = [('delete', 'AKIA-DUMMY1'), ('delete', 'AKIA-DUMMY2')]
+    assert expected_actions == updated_csv_row['actions']
+    assert main.NO_CREDENTIALS_ACTIVE == updated_csv_row['state']
