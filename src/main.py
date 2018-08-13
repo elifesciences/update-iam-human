@@ -110,7 +110,6 @@ def user_report(user_csvrow, max_key_age, grace_period_days):
         ensure(len(access_keys) < 3, MANY_CREDENTIALS) # there must only ever be 0, 1 or 2 keys
 
         active_keys, inactive_keys = splitfilter(lambda key: key['status'] != 'Inactive', access_keys)
-        ensure(active_keys, NO_CREDENTIALS_ACTIVE)
 
         # always prune inactive keys
         [actions.append(('delete', key['access_key_id'])) for key in inactive_keys]
@@ -129,8 +128,7 @@ def user_report(user_csvrow, max_key_age, grace_period_days):
                 # we're in the grace period, nothing to do until it ends
                 state = GRACE_PERIOD
 
-        else:
-            # 1 active key
+        elif len(active_keys) == 1:
             active_key = active_keys[0]
             if (today - active_key['create_date']).days <= max_key_age:
                 state = IDEAL
@@ -140,6 +138,8 @@ def user_report(user_csvrow, max_key_age, grace_period_days):
                 actions += [
                     ('create', 'new')
                 ]
+        else:
+            state = NO_CREDENTIALS_ACTIVE
 
         user_csvrow.update({
             'success?': True,
