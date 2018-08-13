@@ -76,70 +76,70 @@ def read_input(user_csvpath):
         ensure(header == INPUT_HEADER, "csv file has incorrect header: %s" % header)
         return retval
 
-def key_list(iamuser):
-    iamuser.load() # also re-loads
-    return list(iamuser.access_keys.all())
+def coerce_key(kp):
+    return {
+        'access_key_id': kp.access_key_id,
+        'create_date': kp.create_date,
+        'status': kp.status,
+        '-obj': kp,
+    }
 
-def get_key(iamuser, key_id):
-    return lfilter(lambda kp: kp.access_key_id == key_id, key_list(iamuser))
+def _get_user(iam_username):
+    iam = boto3.resource('iam')
+    return iam.User(iam_username)
 
-def create_date(key):
-    # key.create_date ll: 2013-01-15 15:15:57+00:00
-    #return date_parser.parse(key.create_date)
-    return key.create_date # turns out this is already parsed
+def key_list(iam_username):
+    return lmap(coerce_key, _get_user(iam_username).access_keys.all())
+
+def get_key(iam_username, key_id):
+    iamuser = _get_user(iam_username)
+    return lfilter(lambda kp: kp['access_key_id'] == key_id, key_list(iamuser))
 
 def utcnow():
     return datetime.now(tz=timezone.utc)
 
 def user_report(user_csvrow, max_key_age, grace_period_days):
+    "given a row, returns the same row with a list of action"
     try:
         today = utcnow()
         state = UNKNOWN
         actions = []
 
-        iam = boto3.resource('iam')
-        iamuser = iam.User(user_csvrow['iam-username'])
-
-        access_keys = key_list(iamuser)
+        access_keys = key_list(user_csvrow['iam-username'])
         ensure(len(access_keys) > 0, NO_CREDENTIALS)
         ensure(len(access_keys) < 3, MANY_CREDENTIALS) # there must only ever be 0, 1 or 2 keys
 
-        active_keys, inactive_keys = splitfilter(lambda key: key.status != 'Inactive', access_keys)
+        active_keys, inactive_keys = splitfilter(lambda key: key['status'] != 'Inactive', access_keys)
         ensure(active_keys, NO_CREDENTIALS_ACTIVE)
 
+        # always prune inactive keys
+        [actions.append(('delete', key['access_key_id'])) for key in inactive_keys]
+
         if len(active_keys) > 1:
-            state = ALL_CREDENTIALS_ACTIVE
             # we have two active keys
             # * user is possibly using both sets, which is no longer supported, or
             # * user was granted a new set of credentials by this script
-            newest_key, oldest_key = sorted(active_keys, key=create_date)
-            if (today - create_date(newest_key)).days > grace_period_days:
-                # grace period is over
-                # mark the oldest of the two active keys as inactive
-                inactive_keys.append(oldest_key)
-                active_keys.remove(oldest_key)
-
-        # always prune inactive keys
-        [actions.append(('delete', key.access_key_id)) for key in inactive_keys]
-
-        # state: 1 or 2 active keys. no inactive keys.
-
-        if len(active_keys) > 1:
-            # transition period, nothing else to do until grace period expires
-            state = GRACE_PERIOD
+            oldest_key, newest_key = sorted(active_keys, key=lambda kp: kp['create_date']) # ASC
+            if (today - newest_key['create_date']).days > grace_period_days:
+                state = ALL_CREDENTIALS_ACTIVE
+                # grace period is over. mark the oldest of the two active keys as inactive.
+                # it will be deleted on the next turn
+                actions.append(('disable', oldest_key['access_key_id']))
+            else:
+                # we're in the grace period, nothing to do until it ends
+                state = GRACE_PERIOD
 
         else:
             # 1 active key
             active_key = active_keys[0]
-            if (today - create_date(active_key)).days > max_key_age:
+            if (today - active_key['create_date']).days <= max_key_age:
+                state = IDEAL
+            else:
                 # remaining key is too old
                 state = OLD_CREDENTIALS
                 actions += [
-                    ('disable', active_key.access_key_id),
                     ('create', 'new')
                 ]
-            else:
-                state = IDEAL
 
         user_csvrow.update({
             'success?': True,
@@ -159,15 +159,16 @@ def user_report(user_csvrow, max_key_age, grace_period_days):
         })
         return user_csvrow
 
-def delete_key(iamuser, key_id):
-    get_key(iamuser, key_id).delete()
+def delete_key(iam_username, key_id):
+    get_key(iam_username, key_id)['-obj'].delete()
     return True
 
-def disable_key(iamuser, key_id):
-    get_key(iamuser, key_id).disable()
+def disable_key(iam_username, key_id):
+    get_key(iam_username, key_id)['-obj'].disable()
     return True
 
-def create_key(iamuser, _):
+def create_key(iam_username, _):
+    iamuser = _get_user(iam_username)
     key = iamuser.create_access_key_pair()
     return (key.access_key_id, key.secret_access_key)
 
@@ -177,11 +178,9 @@ def execute_user_report(user_report_data):
         'disable': disable_key,
         'create': create_key,
     }
-    iam = boto3.resource('iam')
-    iamuser = iam.User(user_report_data['iam-username'])
-    iamuser.load()
+    iam_username = user_report_data['iam-username']    
     actions = user_report_data['actions']
-    results = [actions[fnkey](iamuser, val) for fnkey, val in actions]
+    results = [actions[fnkey](iam_username, val) for fnkey, val in actions]
     user_report_data['results'] = list(zip(actions, results))
     return user_report_data
 
@@ -273,7 +272,7 @@ Please contact it-admin@elifesciences.org if you have any concerns.'''
     email_host = 'smtp.google.com'
     email_user = 'foo'
     email_pass = 'bar'
-    email_port_tls, email_port_ssl = 587, 465
+    email_port_ssl = 465
 
     # or is it TLS?
     with smtplib.SMTP_SSL(email_host, email_port_ssl) as smtp:
