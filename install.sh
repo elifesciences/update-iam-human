@@ -2,7 +2,7 @@
 set -e # everything must succeed.
 echo "[-] install.sh"
 
-python=/usr/bin/python3.6
+python=/usr/bin/python3.5
 py=${python##*/} # ll: python3.5
 
 # check for exact version of python3
