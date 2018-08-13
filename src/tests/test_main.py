@@ -62,6 +62,22 @@ def test_multiple_active_credentials():
     assert expected_actions == updated_csv_row['actions']
     assert main.GRACE_PERIOD == updated_csv_row['state']
 
+def test_credentials_full():
+    "when there is one old but active credentials and one inactive credentials"
+    test_csv_row = {'iam-username': 'FooBar'}
+    two_days_ago = main.utcnow() - timedelta(days=2)
+    three_days_ago = main.utcnow() - timedelta(days=3)
+    max_key_age, grace_period = 1, 7
+    key_list = [
+        {'access_key_id': 'AKIA-DUMMY1', 'create_date': three_days_ago, 'status': 'Inactive'},
+        {'access_key_id': 'AKIA-DUMMY2', 'create_date': two_days_ago, 'status': 'Active'}
+    ]
+    with patch('src.main.key_list', return_value=key_list):
+        updated_csv_row = main.user_report(test_csv_row, max_key_age, grace_period)
+    expected_actions = [('delete', 'AKIA-DUMMY1'), ('create', 'new')] # order is important
+    assert expected_actions == updated_csv_row['actions']
+    assert main.OLD_CREDENTIALS == updated_csv_row['state']
+
 def test_delete_single_inactive_credential():
     "any disabled credentials will be deleted"
     test_csv_row = {'iam-username': 'FooBar'}
