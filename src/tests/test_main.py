@@ -78,6 +78,18 @@ def test_credentials_full():
     assert expected_actions == updated_csv_row['actions']
     assert main.OLD_CREDENTIALS == updated_csv_row['state']
 
+def test_credentials_empty():
+    "when there are no credentials to work with"
+    test_csv_row = {'iam-username': 'FooBar'}
+    max_key_age, grace_period = 90, 7
+    key_list = []
+    with patch('src.main.key_list', return_value=key_list):
+        updated_csv_row = main.user_report(test_csv_row, max_key_age, grace_period)
+    expected_actions = [] # nothing
+    assert expected_actions == updated_csv_row['actions']
+    assert main.NO_CREDENTIALS == updated_csv_row['state']
+    assert False == updated_csv_row['success?']
+
 def test_delete_single_inactive_credential():
     "any disabled credentials will be deleted"
     test_csv_row = {'iam-username': 'FooBar'}
