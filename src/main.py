@@ -1,11 +1,9 @@
 import boto3
-from datetime import timedelta
 import sys, os, csv
 from github import Github
 from github.InputFileContent import InputFileContent
 import json
-import smtplib
-from email.message import EmailMessage
+from datetime import timedelta
 from collections import OrderedDict
 from .utils import ensure, ymd, splitfilter, spy, vals, lmap, lfilter, utcnow
 
@@ -238,27 +236,25 @@ Your old credentials and this message will expire on {insert-expiry-date}.'''
 # email
 #
 
-EMAIL_HOST = 'smtp.google.com'
-EMAIL_USER = 'foo'
-EMAIL_PASS = 'bar'
-EMAIL_PORT = 465
 EMAIL_FROM = 'it-admin@elifesciences.org'
+EMAIL_DEV_ADDR = 'tech-team@elifesciences.org'
 
 def send_email(to_addr, subject, content):
-    # build an email message then send it
-    # stolen directly from: https://docs.python.org/3/library/email.examples.html
-    # https://docs.python.org/3/library/smtplib.html#smtplib.SMTP
-    email = EmailMessage()
-    email.set_content(content)
-    email['Subject'] = subject
-    email['From'] = EMAIL_FROM
-    email['To'] = to_addr
-    
-    with smtplib.SMTP_SSL(EMAIL_HOST, EMAIL_PORT) as smtp:
-        smtp.login(EMAIL_USER, EMAIL_PASS)
-        smtp.send_message(email)
+    # https://boto3.readthedocs.io/en/latest/reference/services/ses.html?highlight=ses#client
+    ses = boto3.client('ses', region_name='us-east-1')
 
-    return True
+    # https://boto3.readthedocs.io/en/latest/reference/services/ses.html?highlight=ses#SES.Client.send_email
+    kwargs = {
+        'Source': EMAIL_FROM, # verified SES address
+        'Destination': {'ToAddresses': [to_addr]},
+        'Message': {
+            'Subject': {'Charset': 'UTF-8', 'Data': subject},
+            'Body': {'Text': {'Charset': 'UTF-8', 'Data': content}}
+        },
+        'ReplyToAddress': [EMAIL_FROM],
+        'ReturnPath': EMAIL_DEV_ADDR,
+    }
+    return ses.send_email(**kwargs)
 
 def email_user__new_credentials(user_csvrow):
     ensure('gist-html-url' in user_csvrow, "`email_user__new_credentials` requires the results of calling `gh_create_user_gist`")
@@ -280,10 +276,9 @@ Please contact it-admin@elifesciences.org if you have any problems.'''
         'insert-expiry-date': ymd(utcnow() + timedelta(days=user_csvrow['grace-period-days'])),
         'insert-gist-url': user_csvrow['gist-html-url']
     })
-
-    send_email(to_addr, subject, content)
-    
+    result = send_email(to_addr, subject, content)    
     user_csvrow.update({
+        'email-id': result['MessageId'], # probably not at all useful
         'email-sent': utcnow(),
     })
     return user_csvrow
