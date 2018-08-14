@@ -285,9 +285,6 @@ Please contact it-admin@elifesciences.org if you have any concerns.'''
         'email-sent': utcnow(),
     })
     return user_csvrow
-    
-    
-    
 
 def notify(report_results):
     pass

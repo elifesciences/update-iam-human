@@ -1,4 +1,4 @@
 #!/bin/bash
 set -e
 source venv/bin/activate
-pytest -vvv
+pytest -vvv --blockage
