@@ -308,9 +308,10 @@ def notify(report_results):
     results = lmap(email_user__new_credentials, users_w_gists)
     return {'notified': results, 'unnotified': unnotified}
 
-def write_report(passes, fails):
+def write_report(user_csvpath, passes, fails):
     report = {'passes': passes, 'fails': fails}
-    path = 'report.json'
+    path = os.path.splitext(os.path.basename(user_csvpath))[0]
+    path = '%s-report.json' % path
     print(json.dumps(report, indent=4))
     json.dump(report, open(path, 'w'), indent=4)
     return path
@@ -340,7 +341,7 @@ def main(user_csvpath, max_key_age=90, grace_period_days=7):
 
     results = notify(results)
 
-    print('wrote: ', write_report(results, fail_rows))
+    print('wrote: ', write_report(user_csvpath, results, fail_rows))
 
     return 0
 
