@@ -7,6 +7,7 @@ from github.InputFileContent import InputFileContent
 import json
 import smtplib
 from email.message import EmailMessage
+from collections import OrderedDict
 
 """input CSV must have these columns: name, email, iam-username
 output CSV looks like: name, email, iam-username, message"""
@@ -173,15 +174,15 @@ def create_key(iam_username, _):
     return (key.access_key_id, key.secret_access_key)
 
 def execute_user_report(user_report_data):
-    actions = {
+    dispatch = {
         'delete': delete_key,
         'disable': disable_key,
         'create': create_key,
     }
     iam_username = user_report_data['iam-username']    
     actions = user_report_data['actions']
-    results = [actions[fnkey](iam_username, val) for fnkey, val in actions]
-    user_report_data['results'] = list(zip(actions, results))
+    results = [dispatch[fnkey](iam_username, val) for fnkey, val in actions]
+    user_report_data['results'] = OrderedDict(zip(actions, results))
     return user_report_data
 
 def execute_report(report_data):

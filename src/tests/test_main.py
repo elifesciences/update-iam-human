@@ -2,7 +2,7 @@ from src import main
 from src.main import ensure
 import pytest
 from datetime import timedelta
-from unittest.mock import patch
+from unittest.mock import patch, DEFAULT
 
 def test_ensure():
     ensure(1 == 1, "working")
@@ -116,3 +116,27 @@ def test_delete_multiple_inactive_credentials():
     expected_actions = [('delete', 'AKIA-DUMMY1'), ('delete', 'AKIA-DUMMY2')]
     assert expected_actions == updated_csv_row['actions']
     assert main.NO_CREDENTIALS_ACTIVE == updated_csv_row['state']
+
+#
+#
+#
+
+def test_execute_user_report():
+    actions = [('delete', 'AKIA-DUMMY1'), ('disable', 'AKIA-DUMMY2'), ('create', 'new')]
+    test_user_report = {
+        'iam-username': 'FooBar',
+        #'success?': True, 'state': 'ideal', 'reason': '...', # unnecessary to execute report
+        'actions': actions
+    }
+
+    with patch.multiple('src.main', delete_key=DEFAULT, disable_key=DEFAULT, create_key=DEFAULT) as mocks:
+        results = main.execute_user_report(test_user_report)
+
+        # test each of the mocks was called ...
+        assert mocks['delete_key'].call_count == 1
+        assert mocks['disable_key'].call_count == 1
+        assert mocks['create_key'].call_count == 1
+
+        # and in the correct order ...
+        # results are keyed by their action, the result values are just mocks
+        assert list(results['results'].keys()) == actions
