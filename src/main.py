@@ -7,9 +7,6 @@ from datetime import timedelta
 from collections import OrderedDict
 from .utils import ensure, ymd, splitfilter, vals, lmap, lfilter, utcnow
 
-"""input CSV must have these columns: name, email, iam-username
-output CSV looks like: name, email, iam-username, message"""
-
 # states
 
 UNKNOWN = '?'
@@ -39,10 +36,6 @@ STATE_DESCRIPTIONS = {
     UNKNOWN: "credentials are in an unhandled state (program error)"
 }
 
-# github
-
-# ll: {'key': 'github-api-token'}
-GH_CREDENTIALS_FILE = os.path.abspath("private.json")
 
 #
 # aws IAM
@@ -202,9 +195,11 @@ def execute_report(report_data):
 
 
 #
-# aws gist
+# github gist
 #
 
+# ll: {'key': 'github-api-token'}
+GH_CREDENTIALS_FILE = os.path.abspath("private.json")
 
 def gh_credentials():
     return json.load(open(GH_CREDENTIALS_FILE, 'r'))
@@ -304,8 +299,9 @@ Please contact it-admin@elifesciences.org if you have any problems.'''
     user_csvrow['gist-html-url'] = '[redacted]'
     return user_csvrow
 
+
 #
-#
+# report wrangling
 #
 
 def notify(report_results):
