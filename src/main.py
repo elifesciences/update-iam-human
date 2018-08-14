@@ -261,6 +261,7 @@ def send_email(to_addr, subject, content):
     return True
 
 def email_user__new_credentials(user_csvrow):
+    ensure('gist-html-url' in user_csvrow, "`email_user__new_credentials` requires the results of calling `gh_create_user_gist`")
     name, to_addr = vals(user_csvrow, 'name', 'email')
     subject = 'Replacement AWS credentials'
     content = '''Hello {insert-name-of-human},
@@ -276,7 +277,7 @@ Your new set of credentials can be found here:
 Please contact it-admin@elifesciences.org if you have any problems.'''
     content = content.format_map({
         'insert-name-of-human': user_csvrow['name'],
-        'insert-expiry-date': ymd(utcnow() + user_csvrow['grace-period-days']),
+        'insert-expiry-date': ymd(utcnow() + timedelta(days=user_csvrow['grace-period-days'])),
         'insert-gist-url': user_csvrow['gist-html-url']
     })
 

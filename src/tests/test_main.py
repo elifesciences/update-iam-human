@@ -153,3 +153,20 @@ def test_create_user_gist():
     expected.update(mock_gist)
         
     assert expected == result
+
+#
+#
+#
+
+def test_email_user__new_credentials():
+    test_user_result = {
+        'name': 'Pants', 'email': 'foo@example.org',
+        'grace-period-days': 7,
+
+        'gist-html-url': 'https://example.org',
+        'gist-id': -1,
+        'gist-created-at': datetime(year=2001, month=1, day=1)
+    }
+    with patch('src.main.send_email'):
+        result = main.email_user__new_credentials(test_user_result)
+    assert 'email-sent' in result
