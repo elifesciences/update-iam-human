@@ -123,6 +123,7 @@ def user_report(user_csvrow, max_key_age, grace_period_days):
 
         elif len(active_keys) == 1:
             active_key = active_keys[0]
+            # if max_key_age <= 1, you get a 'create' action on every call
             if (today - active_key['create_date']).days <= max_key_age:
                 state = IDEAL
             else:

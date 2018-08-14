@@ -1,10 +1,10 @@
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 
 def first(x):
     return x[0]
 
 def utcnow():
-    return datetime.now(tz=timezone.utc) + timedelta(days=9)
+    return datetime.now(tz=timezone.utc)
 
 def ensure(b, m, retcode=1):
     if not b:

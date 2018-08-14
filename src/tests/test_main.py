@@ -7,16 +7,20 @@ def test_rotate_very_old_credentials():
     """a user with a single, very old credential will go through these steps:
     1. create new credential
     2. wait until grace period is up
-    3. disable old credential"""
+    3. disable old credential
+    4. call again (next day presumably)
+    5. delete any disabled credentials
+    """
     test_csv_row = {'iam-username': 'FooBar'}
     today = utils.utcnow()
     two_years_ago = today - timedelta(days=(365*2))
-    key_list = [
-        {'access_key_id': 'AKIA-DUMMY', 'create_date': two_years_ago, 'status': 'Active'} # 'Active' or 'Inactive'
-    ]
     max_key_age = 90 # days
     grace_period = 7 # days
 
+    # 1. very old key
+    key_list = [
+        {'access_key_id': 'AKIA-DUMMY', 'create_date': two_years_ago, 'status': 'Active'} # 'Active' or 'Inactive'
+    ]
     with patch('src.main.key_list', return_value=key_list):
         updated_csv_row = main.user_report(test_csv_row, max_key_age, grace_period)
 
@@ -25,7 +29,8 @@ def test_rotate_very_old_credentials():
     ]
     assert expected_actions == updated_csv_row['actions']
 
-    # assume the report is executed and that new key for this user is created,
+
+    # 2. assume the report is executed and that new key for this user is created,
     # zip forward $grace-period + 1 days and run the report again
     a_graceperiod_from_now = today + timedelta(days=grace_period + 1)
     key_list.append({'access_key_id': 'AKIA-DUMMY2', 'create_date': today, 'status': 'Active'})
@@ -37,6 +42,22 @@ def test_rotate_very_old_credentials():
         ('disable', 'AKIA-DUMMY'),
     ]
     assert expected_actions == future_csv_row['actions']
+
+    
+    # 3. now that the old key is deactivated, it will be deleted on the next execution
+    key_list = [
+        {'access_key_id': 'AKIA-DUMMY', 'create_date': two_years_ago, 'status': 'Inactive'}, # original key, now inactive
+        {'access_key_id': 'AKIA-DUMMY2', 'create_date': today, 'status': 'Active'}, # new key, just created
+    ]
+    with patch('src.main.key_list', return_value=key_list):
+        # date doesn't matter but lets be consistent
+        with patch('src.main.utcnow', return_value=a_graceperiod_from_now):
+            future_csv_row2 = main.user_report(test_csv_row, max_key_age, grace_period)
+
+    expected_actions = [
+        ('delete', 'AKIA-DUMMY')
+    ]
+    assert expected_actions == future_csv_row2['actions']
 
 def test_multiple_active_credentials():
     """multiple active credentials no longer supported, the oldest will be disabled after a grace period. 
