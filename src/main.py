@@ -251,7 +251,7 @@ def send_email(to_addr, subject, content):
             'Subject': {'Charset': 'UTF-8', 'Data': subject},
             'Body': {'Text': {'Charset': 'UTF-8', 'Data': content}}
         },
-        'ReplyToAddress': [EMAIL_FROM],
+        'ReplyToAddresses': [EMAIL_FROM],
         'ReturnPath': EMAIL_DEV_ADDR,
     }
     return ses.send_email(**kwargs)
@@ -307,7 +307,7 @@ def main(user_csvpath, max_key_age=90, grace_period_days=7):
     max_key_age, grace_period_days = lmap(int, [max_key_age, grace_period_days])
     results = [user_report(row, max_key_age, grace_period_days) for row in csv_contents]
     pass_rows, fail_rows = splitfilter(lambda row: row['success?'], results)
-    print('wrote: ', write_report(pass_rows, fail_rows))
+    
     if not pass_rows:
         # nothing to do
         return len(fail_rows)
@@ -325,6 +325,8 @@ def main(user_csvpath, max_key_age=90, grace_period_days=7):
 
     spy(notify(results))
 
+    print('wrote: ', write_report(results, fail_rows))
+    
     return 0
 
 if __name__ == '__main__':
