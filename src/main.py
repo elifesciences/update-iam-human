@@ -13,6 +13,7 @@ output CSV looks like: name, email, iam-username, message"""
 # states
 
 UNKNOWN = '?'
+USER_NOT_FOUND = 'user-not-found'
 
 IDEAL = 'ideal'
 GRACE_PERIOD = 'in-grace-period'
@@ -33,6 +34,7 @@ STATE_DESCRIPTIONS = {
     NO_CREDENTIALS: "no credentials exist",
 
     # bad states
+    USER_NOT_FOUND: "user not found",
     MANY_CREDENTIALS: "more than 2 sets of credentials exist (program error)",
     UNKNOWN: "credentials are in an unhandled state (program error)"
 }
@@ -78,7 +80,7 @@ def _get_user(iam_username):
 
 def key_list(iam_username):
     _user = _get_user(iam_username)
-    return lmap(coerce_key, _user.access_keys.all()) if _user else []
+    return lmap(coerce_key, _user.access_keys.all()) if _user else None
 
 def get_key(iam_username, key_id):
     keys = lfilter(lambda kp: kp['access_key_id'] == key_id, key_list(iam_username))
@@ -93,6 +95,8 @@ def user_report(user_csvrow, max_key_age, grace_period_days):
         actions = []
 
         access_keys = key_list(user_csvrow['iam-username'])
+        ensure(access_keys != None, USER_NOT_FOUND)
+
         ensure(len(access_keys) > 0, NO_CREDENTIALS)
         ensure(len(access_keys) < 3, MANY_CREDENTIALS) # there must only ever be 0, 1 or 2 keys
 
@@ -242,6 +246,8 @@ Your old credentials and this message will expire on {insert-expiry-date}.'''
     })
     gist = create_gist("new AWS API credentials", content)
     user_csvrow.update(gist)
+    # nullify the secret key, we no longer need it
+    user_csvrow['results']['create']['aws-secret-key'] = '[redacted]'
     return user_csvrow
 
 
@@ -294,6 +300,8 @@ Please contact it-admin@elifesciences.org if you have any problems.'''
         'email-id': result['MessageId'], # probably not at all useful
         'email-sent': utcnow(),
     })
+    # nullify the gist html url, it contains the secret key
+    user_csvrow['gist-html-url'] = '[redacted]'
     return user_csvrow
 
 #
