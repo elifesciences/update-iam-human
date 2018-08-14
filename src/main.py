@@ -81,8 +81,9 @@ def key_list(iam_username):
     return lmap(coerce_key, _user.access_keys.all()) if _user else []
 
 def get_key(iam_username, key_id):
-    iamuser = _get_user(iam_username)
-    return lfilter(lambda kp: kp['access_key_id'] == key_id, key_list(iamuser))
+    keys = lfilter(lambda kp: kp['access_key_id'] == key_id, key_list(iam_username))
+    if len(keys) == 1:
+        return keys[0]
 
 def user_report(user_csvrow, max_key_age, grace_period_days):
     "given a row, returns the same row with a list of action"
@@ -153,13 +154,19 @@ def user_report(user_csvrow, max_key_age, grace_period_days):
 
 def delete_key(iam_username, key_id):
     print('deleting key for', iam_username)
-    get_key(iam_username, key_id)['-obj'].delete()
-    return True
+    key = get_key(iam_username, key_id)
+    if key:
+        key['-obj'].delete()
+        return True
+    return False
 
 def disable_key(iam_username, key_id):
     print('disabling key for', iam_username)
-    get_key(iam_username, key_id)['-obj'].disable()
-    return True
+    key = get_key(iam_username, key_id)
+    if key:
+        key['-obj'].deactivate()
+        return True
+    return False
 
 def create_key(iam_username, _):
     print('creating key for',iam_username)
