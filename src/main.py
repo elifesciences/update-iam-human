@@ -5,7 +5,7 @@ from github.InputFileContent import InputFileContent
 import json
 from datetime import timedelta
 from collections import OrderedDict
-from .utils import ensure, ymd, splitfilter, spy, vals, lmap, lfilter, utcnow
+from .utils import ensure, ymd, splitfilter, vals, lmap, lfilter, utcnow
 
 """input CSV must have these columns: name, email, iam-username
 output CSV looks like: name, email, iam-username, message"""
@@ -73,7 +73,7 @@ def _get_user(iam_username):
         iamuser.load()
         return iamuser
     except Exception as err:
-        print('user error: %s' % str(err))
+        print('warning: %s' % str(err))
         return None
 
 def key_list(iam_username):
@@ -152,14 +152,17 @@ def user_report(user_csvrow, max_key_age, grace_period_days):
         return user_csvrow
 
 def delete_key(iam_username, key_id):
+    print('deleting key for', iam_username)
     get_key(iam_username, key_id)['-obj'].delete()
     return True
 
 def disable_key(iam_username, key_id):
+    print('disabling key for', iam_username)
     get_key(iam_username, key_id)['-obj'].disable()
     return True
 
 def create_key(iam_username, _):
+    print('creating key for',iam_username)
     iamuser = _get_user(iam_username)
     key = iamuser.create_access_key_pair()
     return {'aws-access-key': key.access_key_id,
@@ -174,8 +177,10 @@ def execute_user_report(user_report_data):
     }
     iam_username = user_report_data['iam-username']    
     actions = user_report_data['actions']
-    results = [dispatch[fnkey](iam_username, val) for fnkey, val in actions]
-    user_report_data['results'] = OrderedDict(zip(actions, results))
+    results = [(fnkey, dispatch[fnkey](iam_username, val)) for fnkey, val in actions]
+    # weakness: no more than one type of action per execution else results get squashed
+    # for example, can't do two 'disables' or two 'deletes'. not a problem right now
+    user_report_data['results'] = OrderedDict(results)
     return user_report_data
 
 def execute_report(report_data):
@@ -220,7 +225,7 @@ aws_secret_access_key={insert-secret-key}
 
 Your old credentials and this message will expire on {insert-expiry-date}.'''
 
-    new_key = user_csvrow['results'][('create', 'new')]
+    new_key = user_csvrow['results']['create']
     content = content.format_map({
         'insert-name-of-human': user_csvrow['name'],
         'insert-access-key': new_key['aws-access-key'],
@@ -291,9 +296,10 @@ def notify(report_results):
     "notifies users after executing actions in report"
     # TODO: should user be notified if credentials have been disabled after a grace period?
     # create a gist for those users with new credentials
-    users_w_new_credentials = lfilter(lambda row: ('create', 'new') in row['results'], report_results)
+    users_w_new_credentials, unnotified = splitfilter(lambda row: 'create' in row['results'], report_results)
     users_w_gists = lmap(gh_create_user_gist, users_w_new_credentials)
-    return lmap(email_user__new_credentials, users_w_gists)
+    results = lmap(email_user__new_credentials, users_w_gists)
+    return {'notified': results, 'unnotified': unnotified}
 
 def write_report(passes, fails):
     report = {'passes': passes, 'fails': fails}
@@ -305,6 +311,7 @@ def write_report(passes, fails):
 def main(user_csvpath, max_key_age=90, grace_period_days=7):
     csv_contents = read_input(user_csvpath)
     max_key_age, grace_period_days = lmap(int, [max_key_age, grace_period_days])
+    print('querying %s users ...' % len(csv_contents))
     results = [user_report(row, max_key_age, grace_period_days) for row in csv_contents]
     pass_rows, fail_rows = splitfilter(lambda row: row['success?'], results)
     
@@ -313,6 +320,7 @@ def main(user_csvpath, max_key_age=90, grace_period_days=7):
         return len(fail_rows)
 
     try:
+        print(json.dumps(pass_rows, indent=4))
         print('execute actions? (ctrl-c to quit)')
         uin = input('> ')
         if uin and uin.lower().startswith('n'):
@@ -321,12 +329,12 @@ def main(user_csvpath, max_key_age=90, grace_period_days=7):
         print()
         return 1
 
-    results = spy(execute_report(pass_rows))
+    results = execute_report(pass_rows)
 
-    spy(notify(results))
+    results = notify(results)
 
     print('wrote: ', write_report(results, fail_rows))
-    
+
     return 0
 
 if __name__ == '__main__':

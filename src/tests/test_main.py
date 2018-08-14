@@ -133,7 +133,8 @@ def test_execute_user_report():
 
         # and in the correct order ...
         # results are keyed by their action, the result values are just mocks
-        assert list(results['results'].keys()) == actions
+        expected = utils.lmap(utils.first, actions)
+        assert expected == list(results['results'].keys())
 
 #
 #
@@ -143,7 +144,7 @@ def test_create_user_gist():
     test_user_result = {
         'name': 'Pants',
         'grace-period-days': 7,
-        'results': {('create', 'new'): {'aws-access-key': 'AKIA-DUMMY', 'aws-secret-key': 'as89dffds9a'}},
+        'results': {'create': {'aws-access-key': 'AKIA-DUMMY', 'aws-secret-key': 'as89dffds9a'}},
     }
     mock_gist = {'gist-html-url': 'https://example.org', 'gist-id': -1, 'gist-created-at': datetime(year=2001, month=1, day=1)}
     with patch('src.main.create_gist', return_value=mock_gist):
