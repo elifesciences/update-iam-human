@@ -1,6 +1,5 @@
 import boto3
-from datetime import datetime, timezone
-#from dateutil import parser as date_parser
+from datetime import timedelta
 import sys, os, csv
 from github import Github
 from github.InputFileContent import InputFileContent
@@ -8,31 +7,10 @@ import json
 import smtplib
 from email.message import EmailMessage
 from collections import OrderedDict
+from .utils import ensure, ymd, splitfilter, spy, vals, lmap, lfilter, utcnow
 
 """input CSV must have these columns: name, email, iam-username
 output CSV looks like: name, email, iam-username, message"""
-
-def ensure(b, m, retcode=1):
-    if not b:
-        inst = AssertionError(m)
-        inst.retcode = retcode
-        raise inst
-
-def splitfilter(fn, lst):
-    ensure(callable(fn) and isinstance(lst, list), "bad arguments to splitfilter")
-    group_a, group_b = [], []
-    [(group_a if fn(x) else group_b).append(x) for x in lst]
-    return group_a, group_b
-
-lmap = lambda fn, lst: list(map(fn, lst))
-lfilter = lambda fn, lst: list(filter(fn, lst))
-
-def spy(val):
-    print('spying: %s' % val)
-    return val
-
-def vals(d, *kl):
-    return [d[k] for k in kl if k in d]
 
 # states
 
@@ -60,6 +38,11 @@ STATE_DESCRIPTIONS = {
     MANY_CREDENTIALS: "more than 2 sets of credentials exist (program error)",
     UNKNOWN: "credentials are in an unhandled state (program error)"
 }
+
+# github
+
+# ll: {'key': 'github-api-token'}
+GH_CREDENTIALS_FILE = os.path.abspath("private.json")
 
 #
 # aws IAM
@@ -103,9 +86,6 @@ def get_key(iam_username, key_id):
     iamuser = _get_user(iam_username)
     return lfilter(lambda kp: kp['access_key_id'] == key_id, key_list(iamuser))
 
-def utcnow():
-    return datetime.now(tz=timezone.utc)
-
 def user_report(user_csvrow, max_key_age, grace_period_days):
     "given a row, returns the same row with a list of action"
     try:
@@ -116,6 +96,12 @@ def user_report(user_csvrow, max_key_age, grace_period_days):
         access_keys = key_list(user_csvrow['iam-username'])
         ensure(len(access_keys) > 0, NO_CREDENTIALS)
         ensure(len(access_keys) < 3, MANY_CREDENTIALS) # there must only ever be 0, 1 or 2 keys
+
+        # carry some state around with us for future ops
+        user_csvrow.update({
+            'grace-period-days': grace_period_days,
+            'max-key-age': max_key_age
+        })
 
         active_keys, inactive_keys = splitfilter(lambda key: key['status'] != 'Inactive', access_keys)
 
@@ -178,7 +164,8 @@ def disable_key(iam_username, key_id):
 def create_key(iam_username, _):
     iamuser = _get_user(iam_username)
     key = iamuser.create_access_key_pair()
-    return (key.access_key_id, key.secret_access_key)
+    return {'aws-access-key': key.access_key_id,
+            'aws-secret-key': key.secret_access_key}
 
 def execute_user_report(user_report_data):
     ensure(isinstance(user_report_data, dict), "user-report must be a dict")
@@ -203,19 +190,29 @@ def execute_report(report_data):
 # aws gist
 #
 
-def aws_credentials():
-    return json.load(open('private.json', 'r'))
 
-def aws_user():
+def gh_credentials():
+    return json.load(open(GH_CREDENTIALS_FILE, 'r'))
+
+def gh_user():
     "returns a user that can create gists"
-    credentials = aws_credentials()
+    credentials = gh_credentials()
     gh = Github(credentials['key'])
     return gh.get_user()
 
-def aws_create_gist(user_csvrow):
-    authenticated_user = aws_user()
+def create_gist(description, content):
     public = False
-    description = "new AWS API credentials"
+    authenticated_user = gh_user()
+    content = InputFileContent(content)
+    gist = authenticated_user.create_gist(public, {'content': content}, description)
+    return {
+        'gist-html-url': gist.html_url,
+        'gist-id': gist.id,
+        'gist-created-at': gist.created_at
+    }
+
+def gh_create_user_gist(user_csvrow):
+    ensure('results' in user_csvrow, "`gh_create_user_gist` requires the results of calling `execute_user_report`")
     content = '''Hello, {insert-name-of-human}
 
 Your new AWS credentials are:
@@ -224,19 +221,16 @@ aws_access_key={insert-access-key}
 aws_secret_access_key={insert-secret-key}
 
 Your old credentials and this message will expire on {insert-expiry-date}.'''
-    content = content.format({
+
+    new_key = user_csvrow['results'][('create', 'new')]
+    content = content.format_map({
         'insert-name-of-human': user_csvrow['name'],
-        'insert-access-key': user_csvrow['aws-access-key'],
-        'insert-secret-key': user_csvrow['aws-secret-key'],
-        'insert-expiry-date': user_csvrow['aws-old-key-expiry-date']
+        'insert-access-key': new_key['aws-access-key'],
+        'insert-secret-key': new_key['aws-secret-key'],
+        'insert-expiry-date': ymd(utcnow() + timedelta(days=user_csvrow['grace-period-days'])),
     })
-    content = InputFileContent(content)
-    gist = authenticated_user.create_gist(public, {'content': content}, description)
-    user_csvrow.update({
-        'gist-html-url': gist.html_url,
-        'gist-id': gist.id,
-        'gist-created-at': gist.created_at
-    })
+    gist = create_gist("new AWS API credentials", content)
+    user_csvrow.update(gist)
     return user_csvrow
 
 
@@ -244,58 +238,66 @@ Your old credentials and this message will expire on {insert-expiry-date}.'''
 # email
 #
 
-def notify_user(user_csvrow):
-    user_csvrow = aws_create_gist(user_csvrow)
-    name, email_to = vals(user_csvrow, 'name', 'email')
-    email_from = 'it-admin@elifesciences.org'
+EMAIL_HOST = 'smtp.google.com'
+EMAIL_USER = 'foo'
+EMAIL_PASS = 'bar'
+EMAIL_PORT = 465
+EMAIL_FROM = 'it-admin@elifesciences.org'
+
+def send_email(to_addr, subject, content):
+    # build an email message then send it
+    # stolen directly from: https://docs.python.org/3/library/email.examples.html
+    # https://docs.python.org/3/library/smtplib.html#smtplib.SMTP
+    email = EmailMessage()
+    email.set_content(content)
+    email['Subject'] = subject
+    email['From'] = EMAIL_FROM
+    email['To'] = to_addr
+    
+    with smtplib.SMTP_SSL(EMAIL_HOST, EMAIL_PORT) as smtp:
+        smtp.login(EMAIL_USER, EMAIL_PASS)
+        smtp.send_message(email)
+
+    return True
+
+def email_user__new_credentials(user_csvrow):
+    name, to_addr = vals(user_csvrow, 'name', 'email')
     subject = 'Replacement AWS credentials'
     content = '''Hello {insert-name-of-human},
 
 Your AWS credentials are being rotated. 
 
-This means a new set of credentials has been created for you and your 
-old credentials ({insert-old-key-id}) will be removed after the grace 
-period ({insert-expiry-date} days).
+This means a new set of credentials has been created for you and any 
+old credentials will be removed after the grace period ({insert-expiry-date}).
 
 Your new set of credentials can be found here:
 {insert-gist-url}
 
-Please contact it-admin@elifesciences.org if you have any concerns.'''
+Please contact it-admin@elifesciences.org if you have any problems.'''
     content = content.format_map({
         'insert-name-of-human': user_csvrow['name'],
-        'insert-old-key-id': user_csvrow['old-key-id'],
-        'insert-expiry-date': user_csvrow['aws-old-key-expiry-date'],
+        'insert-expiry-date': ymd(utcnow() + user_csvrow['grace-period-days']),
         'insert-gist-url': user_csvrow['gist-html-url']
     })
 
-    # build an email message then send it
-    # stolen directly from: https://docs.python.org/3/library/email.examples.html
-    msg = EmailMessage()
-    msg.set_content(content)
-    msg['Subject'] = subject
-    msg['From'] = email_from
-    msg['To'] = email_to
-
-    # https://docs.python.org/3/library/smtplib.html#smtplib.SMTP
-    email_host = 'smtp.google.com'
-    email_user = 'foo'
-    email_pass = 'bar'
-    email_port_ssl = 465
-
-    # or is it TLS?
-    with smtplib.SMTP_SSL(email_host, email_port_ssl) as smtp:
-        smtp.login(email_user, email_pass)
-        smtp.send_message(msg)
-
-    # done :)
+    send_email(to_addr, subject, content)
     
     user_csvrow.update({
         'email-sent': utcnow(),
     })
     return user_csvrow
 
+#
+#
+#
+
 def notify(report_results):
-    pass
+    "notifies users after executing actions in report"
+    # TODO: should user be notified if credentials have been disabled after a grace period?
+    # create a gist for those users with new credentials
+    users_w_new_credentials = lfilter(lambda row: ('create', 'new') in row['results'], report_results)
+    users_w_gists = lmap(gh_create_user_gist, users_w_new_credentials)
+    return lmap(email_user__new_credentials, users_w_gists)
 
 def write_report(passes, fails):
     report = {'passes': passes, 'fails': fails}
@@ -304,20 +306,34 @@ def write_report(passes, fails):
     json.dump(report, open(path, 'w'), indent=4)
     return path
 
-#
-# bootstrap
-#
-
 def main(user_csvpath, max_key_age=90, grace_period_days=7):
     csv_contents = read_input(user_csvpath)
     max_key_age, grace_period_days = lmap(int, [max_key_age, grace_period_days])
     results = [user_report(row, max_key_age, grace_period_days) for row in csv_contents]
     pass_rows, fail_rows = splitfilter(lambda row: row['success?'], results)
     print('wrote: ', write_report(pass_rows, fail_rows))
-    return len(fail_rows)
+    if not pass_rows:
+        # nothing to do
+        return len(fail_rows)
+
+    try:
+        print('execute actions? (ctrl-c to quit)')
+        uin = input('> ')
+        if uin and uin.lower().startswith('n'):
+            raise KeyboardInterrupt()
+    except KeyboardInterrupt:
+        print()
+        return 1
+
+    results = spy(execute_report(pass_rows))
+
+    spy(notify(results))
+
+    return 0
 
 if __name__ == '__main__':
     try:
+        ensure(os.path.exists(GH_CREDENTIALS_FILE), "no github credentials found: %s" % GH_CREDENTIALS_FILE)
         args = sys.argv[1:]
         arglst = ['user_csvpath', 'max_key_age', 'grace_period_days']
         ensure(len(args) > 0, "at least one argument required: path-to-csvfile")

@@ -1,13 +1,7 @@
 from src import main
-from src.main import ensure
-import pytest
-from datetime import timedelta
+from src import utils
+from datetime import timedelta, datetime
 from unittest.mock import patch, DEFAULT
-
-def test_ensure():
-    ensure(1 == 1, "working")
-    with pytest.raises(AssertionError):
-        ensure(1 == 2, "not working")    
 
 def test_rotate_very_old_credentials():
     """a user with a single, very old credential will go through these steps:
@@ -15,7 +9,7 @@ def test_rotate_very_old_credentials():
     2. wait until grace period is up
     3. disable old credential"""
     test_csv_row = {'iam-username': 'FooBar'}
-    today = main.utcnow()
+    today = utils.utcnow()
     two_years_ago = today - timedelta(days=(365*2))
     key_list = [
         {'access_key_id': 'AKIA-DUMMY', 'create_date': two_years_ago, 'status': 'Active'} # 'Active' or 'Inactive'
@@ -49,8 +43,8 @@ def test_multiple_active_credentials():
     max key age on youngest is ignored for simplicity"""
     # note: only exeter match this case and they are being handled separately
     test_csv_row = {'iam-username': 'FooBar'}
-    two_days_ago = main.utcnow() - timedelta(days=2)
-    three_days_ago = main.utcnow() - timedelta(days=3)
+    two_days_ago = utils.utcnow() - timedelta(days=2)
+    three_days_ago = utils.utcnow() - timedelta(days=3)
     max_key_age, grace_period = 90, 7
     key_list = [
         {'access_key_id': 'AKIA-DUMMY1', 'create_date': three_days_ago, 'status': 'Active'},
@@ -65,8 +59,8 @@ def test_multiple_active_credentials():
 def test_credentials_full():
     "when there is one old but active credentials and one inactive credentials"
     test_csv_row = {'iam-username': 'FooBar'}
-    two_days_ago = main.utcnow() - timedelta(days=2)
-    three_days_ago = main.utcnow() - timedelta(days=3)
+    two_days_ago = utils.utcnow() - timedelta(days=2)
+    three_days_ago = utils.utcnow() - timedelta(days=3)
     max_key_age, grace_period = 1, 7
     key_list = [
         {'access_key_id': 'AKIA-DUMMY1', 'create_date': three_days_ago, 'status': 'Inactive'},
@@ -93,7 +87,7 @@ def test_credentials_empty():
 def test_delete_single_inactive_credential():
     "any disabled credentials will be deleted"
     test_csv_row = {'iam-username': 'FooBar'}
-    two_days_ago = main.utcnow() - timedelta(days=2)
+    two_days_ago = utils.utcnow() - timedelta(days=2)
     max_key_age, grace_period = 90, 7
     key_list = [{'access_key_id': 'AKIA-DUMMY', 'create_date': two_days_ago, 'status': 'Inactive'}]
     with patch('src.main.key_list', return_value=key_list):
@@ -105,7 +99,7 @@ def test_delete_single_inactive_credential():
 def test_delete_multiple_inactive_credentials():
     "any disabled credentials will be deleted"
     test_csv_row = {'iam-username': 'FooBar'}
-    two_days_ago, two_months_ago = main.utcnow() - timedelta(days=2), main.utcnow() - timedelta(days=28*2)
+    two_days_ago, two_months_ago = utils.utcnow() - timedelta(days=2), utils.utcnow() - timedelta(days=28*2)
     max_key_age, grace_period = 90, 7
     key_list = [
         {'access_key_id': 'AKIA-DUMMY1', 'create_date': two_days_ago, 'status': 'Inactive'},
@@ -140,3 +134,22 @@ def test_execute_user_report():
         # and in the correct order ...
         # results are keyed by their action, the result values are just mocks
         assert list(results['results'].keys()) == actions
+
+#
+#
+#
+
+def test_create_user_gist():
+    test_user_result = {
+        'name': 'Pants',
+        'grace-period-days': 7,
+        'results': {('create', 'new'): {'aws-access-key': 'AKIA-DUMMY', 'aws-secret-key': 'as89dffds9a'}},
+    }
+    mock_gist = {'gist-html-url': 'https://example.org', 'gist-id': -1, 'gist-created-at': datetime(year=2001, month=1, day=1)}
+    with patch('src.main.create_gist', return_value=mock_gist):
+        result = main.gh_create_user_gist(test_user_result)
+
+    expected = test_user_result.copy()
+    expected.update(mock_gist)
+        
+    assert expected == result
