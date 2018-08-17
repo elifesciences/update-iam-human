@@ -1,3 +1,4 @@
+import json
 from datetime import datetime, timezone
 
 def first(x):
@@ -31,3 +32,11 @@ def spy(val):
 
 def vals(d, *kl):
     return [d[k] for k in kl if k in d]
+
+def lossy_json_dumps(obj, **kwargs):
+    "drop-in for json.dumps that handles some objects. Unhandled objects get a simple '[unserialisable]' value."
+    def json_handler(obj):
+        if hasattr(obj, 'isoformat'):
+            return obj.isoformat()
+        return '[unserializable]'
+    return json.dumps(obj, default=json_handler, **kwargs)

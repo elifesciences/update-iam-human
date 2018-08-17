@@ -5,6 +5,7 @@ from github.InputFileContent import InputFileContent
 import json
 from datetime import timedelta
 from collections import OrderedDict
+from . import utils
 from .utils import ensure, ymd, splitfilter, vals, lmap, lfilter, utcnow
 
 # states
@@ -327,8 +328,10 @@ def write_report(user_csvpath, passes, fails):
     report = {'passes': passes, 'fails': fails}
     path = os.path.splitext(os.path.basename(user_csvpath))[0]
     path = '%s-report.json' % path
-    print(json.dumps(report, indent=4))
-    json.dump(report, open(path, 'w'), indent=4)
+    data = utils.lossy_json_dumps(report, indent=4) 
+    print(data)
+    with open(path, 'w') as fh:
+        fh.write(data)
     return path
 
 def main(user_csvpath, max_key_age=90, grace_period_days=7):
@@ -343,7 +346,7 @@ def main(user_csvpath, max_key_age=90, grace_period_days=7):
         return len(fail_rows)
 
     try:
-        print(json.dumps(pass_rows, indent=4))
+        print(utils.lossy_json_dumps(pass_rows, indent=4))
         print('execute actions? (ctrl-c to quit)')
         uin = input('> ')
         if uin and uin.lower().startswith('n'):
