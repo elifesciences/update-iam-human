@@ -43,15 +43,23 @@ STATE_DESCRIPTIONS = {
 
 INPUT_HEADER = ['name', 'email', 'iam-username']
 
+def validate_row(row):
+    ensure(isinstance(row, dict), "row must be a dictionary: %s" % (type(row),))
+    name, email, username = vals(row, 'name', 'email', 'iam-username')
+    ensure(name and email and username, "bad-value: all values in a row must be present: %s" % (row,))
+    ensure('@' in email and '.' in email, "bad-value: email doesn't look like an email to me: %s" % (email,))
+    return True
+
 def read_input(user_csvpath):
     ensure(os.path.exists(user_csvpath), "path not found: %s" % user_csvpath)
     ensure(os.path.isfile(user_csvpath), "path is not a file: %s" % user_csvpath)
     with open(user_csvpath) as fh:
-        retval = list(csv.DictReader(fh, fieldnames=INPUT_HEADER))
-        ensure(len(retval) > 1, "csv file is empty")        
-        header = list(retval.pop(0).keys()) # skip the header
+        rows = list(csv.DictReader(fh, fieldnames=INPUT_HEADER))
+        ensure(len(rows) > 1, "csv file is empty")        
+        header = list(rows.pop(0).keys()) # skip the header
         ensure(header == INPUT_HEADER, "csv file has incorrect header: %s" % header)
-        return retval
+        lmap(validate_row, rows)
+        return rows
 
 def coerce_key(kp):
     return {
