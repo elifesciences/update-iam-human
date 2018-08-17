@@ -5,6 +5,7 @@ from github.InputFileContent import InputFileContent
 import json
 from datetime import timedelta
 from collections import OrderedDict
+from . import utils
 from .utils import ensure, ymd, splitfilter, vals, lmap, lfilter, utcnow
 
 # states
@@ -43,15 +44,23 @@ STATE_DESCRIPTIONS = {
 
 INPUT_HEADER = ['name', 'email', 'iam-username']
 
+def validate_row(row):
+    ensure(isinstance(row, dict), "row must be a dictionary: %s" % (type(row),))
+    name, email, username = vals(row, 'name', 'email', 'iam-username')
+    ensure(name and email and username, "bad-value: all values in a row must be present: %s" % (row,))
+    ensure('@' in email and '.' in email, "bad-value: email doesn't look like an email to me: %s" % (email,))
+    return True
+
 def read_input(user_csvpath):
     ensure(os.path.exists(user_csvpath), "path not found: %s" % user_csvpath)
     ensure(os.path.isfile(user_csvpath), "path is not a file: %s" % user_csvpath)
     with open(user_csvpath) as fh:
-        retval = list(csv.DictReader(fh, fieldnames=INPUT_HEADER))
-        ensure(len(retval) > 1, "csv file is empty")        
-        header = list(retval.pop(0).keys()) # skip the header
+        rows = list(csv.DictReader(fh, fieldnames=INPUT_HEADER))
+        ensure(len(rows) > 1, "csv file is empty")        
+        header = list(rows.pop(0).keys()) # skip the header
         ensure(header == INPUT_HEADER, "csv file has incorrect header: %s" % header)
-        return retval
+        lmap(validate_row, rows)
+        return rows
 
 def coerce_key(kp):
     return {
@@ -239,6 +248,7 @@ Your old credentials and this message will expire on {insert-expiry-date}.'''
         'insert-secret-key': new_key['aws-secret-key'],
         'insert-expiry-date': ymd(utcnow() + timedelta(days=user_csvrow['grace-period-days'])),
     })
+    print('creating gist for', user_csvrow['name'])
     gist = create_gist("new AWS API credentials", content)
     user_csvrow.update(gist)
     # nullify the secret key, we no longer need it
@@ -290,7 +300,8 @@ Please contact it-admin@elifesciences.org if you have any problems.'''
         'insert-expiry-date': ymd(utcnow() + timedelta(days=user_csvrow['grace-period-days'])),
         'insert-gist-url': user_csvrow['gist-html-url']
     })
-    result = send_email(to_addr, subject, content)    
+    print('sending email to %s (%s)' % (user_csvrow['name'], to_addr))
+    result = send_email(to_addr, subject, content)
     user_csvrow.update({
         'email-id': result['MessageId'], # probably not at all useful
         'email-sent': utcnow(),
@@ -317,8 +328,10 @@ def write_report(user_csvpath, passes, fails):
     report = {'passes': passes, 'fails': fails}
     path = os.path.splitext(os.path.basename(user_csvpath))[0]
     path = '%s-report.json' % path
-    print(json.dumps(report, indent=4))
-    json.dump(report, open(path, 'w'), indent=4)
+    data = utils.lossy_json_dumps(report, indent=4) 
+    print(data)
+    with open(path, 'w') as fh:
+        fh.write(data)
     return path
 
 def main(user_csvpath, max_key_age=90, grace_period_days=7):
@@ -333,7 +346,7 @@ def main(user_csvpath, max_key_age=90, grace_period_days=7):
         return len(fail_rows)
 
     try:
-        print(json.dumps(pass_rows, indent=4))
+        print(utils.lossy_json_dumps(pass_rows, indent=4))
         print('execute actions? (ctrl-c to quit)')
         uin = input('> ')
         if uin and uin.lower().startswith('n'):

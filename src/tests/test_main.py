@@ -1,7 +1,12 @@
+import pytest
 from src import main
 from src import utils
 from datetime import timedelta, datetime
 from unittest.mock import patch, DEFAULT
+import os
+from os.path import join
+
+FIXTURE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 def test_rotate_very_old_credentials():
     """a user with a single, very old credential will go through these steps:
@@ -192,3 +197,20 @@ def test_email_user__new_credentials():
     with patch('src.main.send_email'):
         result = main.email_user__new_credentials(test_user_result)
     assert 'email-sent' in result
+
+#
+#
+#
+
+def test_bad_rows_missing_values():
+    fixture = join(FIXTURE_DIR, 'bad-data-missing-values.csv')
+    with pytest.raises(AssertionError) as err:
+        main.read_input(fixture)
+    assert str(err.value).startswith('bad-value: all values in a row must be present')
+
+def test_bad_rows_bad_email():
+    fixture = join(FIXTURE_DIR, 'bad-data-bad-email.csv')
+    with pytest.raises(AssertionError) as err:
+        main.read_input(fixture)
+    assert str(err.value).startswith("bad-value: email doesn't look like an email to me")
+
