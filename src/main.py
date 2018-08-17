@@ -239,6 +239,7 @@ Your old credentials and this message will expire on {insert-expiry-date}.'''
         'insert-secret-key': new_key['aws-secret-key'],
         'insert-expiry-date': ymd(utcnow() + timedelta(days=user_csvrow['grace-period-days'])),
     })
+    print('creating gist for', user_csvrow['name'])
     gist = create_gist("new AWS API credentials", content)
     user_csvrow.update(gist)
     # nullify the secret key, we no longer need it
@@ -290,7 +291,8 @@ Please contact it-admin@elifesciences.org if you have any problems.'''
         'insert-expiry-date': ymd(utcnow() + timedelta(days=user_csvrow['grace-period-days'])),
         'insert-gist-url': user_csvrow['gist-html-url']
     })
-    result = send_email(to_addr, subject, content)    
+    print('sending email to %s (%s)' % (user_csvrow['name'], to_addr))
+    result = send_email(to_addr, subject, content)
     user_csvrow.update({
         'email-id': result['MessageId'], # probably not at all useful
         'email-sent': utcnow(),
