@@ -2,8 +2,9 @@
 set -e # everything must succeed.
 echo "[-] install.sh"
 
-python=/usr/bin/python3.5
-py=${python##*/} # ll: python3.5
+# requires 3.6+ , depends on dict maintaining order
+python=/usr/bin/python3.6
+py=${python##*/} # ll: python3.6
 
 # check for exact version of python3
 if [ ! -e "venv/bin/$py" ]; then
