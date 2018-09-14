@@ -16,7 +16,7 @@ def ensure(b, m, retcode=1):
 def ymd(dt):
     ensure(isinstance(dt, datetime), "`ymd` expecting datetime object")
     return dt.strftime("%Y-%m-%d")
-    
+
 def splitfilter(fn, lst):
     ensure(callable(fn) and isinstance(lst, list), "bad arguments to splitfilter")
     group_a, group_b = [], []

@@ -8,6 +8,8 @@ from collections import OrderedDict
 from . import utils
 from .utils import ensure, ymd, splitfilter, vals, lmap, lfilter, utcnow
 
+MAX_KEY_AGE_DAYS, GRACE_PERIOD_DAYS = 180, 7
+
 # states
 
 UNKNOWN = '?'
@@ -56,7 +58,7 @@ def read_input(user_csvpath):
     ensure(os.path.isfile(user_csvpath), "path is not a file: %s" % user_csvpath)
     with open(user_csvpath) as fh:
         rows = list(csv.DictReader(fh, fieldnames=INPUT_HEADER))
-        ensure(len(rows) > 1, "csv file is empty")        
+        ensure(len(rows) > 1, "csv file is empty")
         header = list(rows.pop(0).keys()) # skip the header
         ensure(header == INPUT_HEADER, "csv file has incorrect header: %s" % header)
         lmap(validate_row, rows)
@@ -97,7 +99,7 @@ def user_report(user_csvrow, max_key_age, grace_period_days):
         actions = []
 
         access_keys = key_list(user_csvrow['iam-username'])
-        ensure(access_keys != None, USER_NOT_FOUND)
+        ensure(access_keys is not None, USER_NOT_FOUND)
 
         ensure(len(access_keys) > 0, NO_CREDENTIALS)
         ensure(len(access_keys) < 3, MANY_CREDENTIALS) # there must only ever be 0, 1 or 2 keys
@@ -176,7 +178,7 @@ def disable_key(iam_username, key_id):
     return False
 
 def create_key(iam_username, _):
-    print('creating key for',iam_username)
+    print('creating key for', iam_username)
     iamuser = _get_user(iam_username)
     key = iamuser.create_access_key_pair()
     return {'aws-access-key': key.access_key_id,
@@ -189,7 +191,7 @@ def execute_user_report(user_report_data):
         'disable': disable_key,
         'create': create_key,
     }
-    iam_username = user_report_data['iam-username']    
+    iam_username = user_report_data['iam-username']
     actions = user_report_data['actions']
     results = [(fnkey, dispatch[fnkey](iam_username, val)) for fnkey, val in actions]
     # weakness: no more than one type of action per execution else results get squashed
@@ -260,7 +262,7 @@ Your old credentials and this message will expire on {insert-expiry-date}.'''
 # email
 #
 
-EMAIL_FROM = 'it-admin@elifesciences.org'
+EMAIL_FROM = 'it-admin@elifesciences.org' # verified SES address
 EMAIL_DEV_ADDR = 'tech-team@elifesciences.org'
 
 def send_email(to_addr, subject, content):
@@ -269,7 +271,7 @@ def send_email(to_addr, subject, content):
 
     # https://boto3.readthedocs.io/en/latest/reference/services/ses.html?highlight=ses#SES.Client.send_email
     kwargs = {
-        'Source': EMAIL_FROM, # verified SES address
+        'Source': EMAIL_FROM,
         'Destination': {'ToAddresses': [to_addr]},
         'Message': {
             'Subject': {'Charset': 'UTF-8', 'Data': subject},
@@ -280,15 +282,45 @@ def send_email(to_addr, subject, content):
     }
     return ses.send_email(**kwargs)
 
+def email_user__old_credentials_disabled(user_csvrow):
+    ensure('results' in user_csvrow, "`email_user__old_credentials_disabled` requires the results of calling `execute_user_report`")
+    ensure('disable' in user_csvrow['results'] and user_csvrow['results']['disable'],
+           "`email_user__old_credentials_disabled` requires a key was successfully disabled")
+    disabled_credential_key = dict(user_csvrow['actions'])['disable']
+    name, to_addr = vals(user_csvrow, 'name', 'email')
+    subject = 'AWS credentials disabled'
+    content = '''Hello {insert-name-of-human},
+
+Your old credentials "{insert-disabled-credential-key}" have exited their grace period
+
+{insert-grace-period} or more days ago you were issued new AWS credentials to replace
+your old set "{insert-disabled-credential-key}". They have now been disabled.
+
+Please contact it-admin@elifesciences.org if you have any problems.'''
+    content = content.format_map({
+        'insert-name-of-human': user_csvrow['name'],
+        'insert-disabled-credential-key': disabled_credential_key,
+        'insert-grace-period': user_csvrow['grace-period-days'],
+    })
+    print(content)
+    print('sending email %r to %s (%s)' % (subject, user_csvrow['name'], to_addr))
+    result = send_email(to_addr, subject, content)
+    user_csvrow.update({
+        'disabled-email-id': result['MessageId'], # probably not at all useful
+        'disabled-email-sent': utcnow(),
+    })
+    return user_csvrow
+
+
 def email_user__new_credentials(user_csvrow):
     ensure('gist-html-url' in user_csvrow, "`email_user__new_credentials` requires the results of calling `gh_create_user_gist`")
     name, to_addr = vals(user_csvrow, 'name', 'email')
     subject = 'Replacement AWS credentials'
     content = '''Hello {insert-name-of-human},
 
-Your AWS credentials are being rotated. 
+Your AWS credentials are being rotated.
 
-This means a new set of credentials has been created for you and any 
+This means a new set of credentials has been created for you and any
 old credentials will be removed after the grace period ({insert-expiry-date}).
 
 Your new set of credentials can be found here:
@@ -328,19 +360,19 @@ def write_report(user_csvpath, passes, fails):
     report = {'passes': passes, 'fails': fails}
     path = os.path.splitext(os.path.basename(user_csvpath))[0]
     path = '%s-report.json' % path
-    data = utils.lossy_json_dumps(report, indent=4) 
+    data = utils.lossy_json_dumps(report, indent=4)
     print(data)
     with open(path, 'w') as fh:
         fh.write(data)
     return path
 
-def main(user_csvpath, max_key_age=90, grace_period_days=7):
+def main(user_csvpath, max_key_age=MAX_KEY_AGE_DAYS, grace_period_days=GRACE_PERIOD_DAYS):
     csv_contents = read_input(user_csvpath)
     max_key_age, grace_period_days = lmap(int, [max_key_age, grace_period_days])
     print('querying %s users ...' % len(csv_contents))
     results = [user_report(row, max_key_age, grace_period_days) for row in csv_contents]
     pass_rows, fail_rows = splitfilter(lambda row: row['success?'], results)
-    
+
     if not pass_rows:
         # nothing to do
         return len(fail_rows)
@@ -372,6 +404,6 @@ if __name__ == '__main__':
         kwargs = dict(zip(arglst, args))
         sys.exit(main(**kwargs))
     except AssertionError as err:
-        print('err:',err)
+        print('err:', err)
         retcode = getattr(err, 'retcode', 1)
         sys.exit(retcode)
