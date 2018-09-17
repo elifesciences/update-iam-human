@@ -288,13 +288,12 @@ def email_user__old_credentials_disabled(user_csvrow):
            "`email_user__old_credentials_disabled` requires a key was successfully disabled")
     disabled_credential_key = dict(user_csvrow['actions'])['disable']
     name, to_addr = vals(user_csvrow, 'name', 'email')
-    subject = 'AWS credentials disabled'
+    subject = 're: Replacement AWS credentials'
     content = '''Hello {insert-name-of-human},
 
-Your old credentials "{insert-disabled-credential-key}" have exited their grace period
+The grace period for updating your AWS credentials is over and "{insert-disabled-credential-key}" has been disabled.
 
-{insert-grace-period} or more days ago you were issued new AWS credentials to replace
-your old set "{insert-disabled-credential-key}". They have now been disabled.
+You can find your new credentials linked to in our previous email.
 
 Please contact it-admin@elifesciences.org if you have any problems.'''
     content = content.format_map({
@@ -302,7 +301,6 @@ Please contact it-admin@elifesciences.org if you have any problems.'''
         'insert-disabled-credential-key': disabled_credential_key,
         'insert-grace-period': user_csvrow['grace-period-days'],
     })
-    print(content)
     print('sending email %r to %s (%s)' % (subject, user_csvrow['name'], to_addr))
     result = send_email(to_addr, subject, content)
     user_csvrow.update({
