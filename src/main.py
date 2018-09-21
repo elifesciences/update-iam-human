@@ -357,7 +357,7 @@ def notify(report_results):
 def write_report(user_csvpath, passes, fails):
     report = {'passes': passes, 'fails': fails}
     path = os.path.splitext(os.path.basename(user_csvpath))[0]
-    path = '%s-report.json' % path
+    path = '%s-report-%s.json' % (path, ymd())
     data = utils.lossy_json_dumps(report, indent=4)
     print(data)
     with open(path, 'w') as fh:
