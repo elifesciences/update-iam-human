@@ -18,7 +18,7 @@ def test_rotate_very_old_credentials():
     """
     test_csv_row = {'iam-username': 'FooBar'}
     today = utils.utcnow()
-    two_years_ago = today - timedelta(days=(365*2))
+    two_years_ago = today - timedelta(days=(365 * 2))
     max_key_age = 90 # days
     grace_period = 7 # days
 
@@ -34,7 +34,6 @@ def test_rotate_very_old_credentials():
     ]
     assert expected_actions == updated_csv_row['actions']
 
-
     # 2. assume the report is executed and that new key for this user is created,
     # zip forward $grace-period + 1 days and run the report again
     a_graceperiod_from_now = today + timedelta(days=grace_period + 1)
@@ -48,7 +47,6 @@ def test_rotate_very_old_credentials():
     ]
     assert expected_actions == future_csv_row['actions']
 
-    
     # 3. now that the old key is deactivated, it will be deleted on the next execution
     key_list = [
         {'access_key_id': 'AKIA-DUMMY', 'create_date': two_years_ago, 'status': 'Inactive'}, # original key, now inactive
@@ -65,7 +63,7 @@ def test_rotate_very_old_credentials():
     assert expected_actions == future_csv_row2['actions']
 
 def test_multiple_active_credentials():
-    """multiple active credentials no longer supported, the oldest will be disabled after a grace period. 
+    """multiple active credentials no longer supported, the oldest will be disabled after a grace period.
     max key age on youngest is ignored for simplicity"""
     # note: only exeter match this case and they are being handled separately
     test_csv_row = {'iam-username': 'FooBar'}
@@ -125,7 +123,7 @@ def test_delete_single_inactive_credential():
 def test_delete_multiple_inactive_credentials():
     "any disabled credentials will be deleted"
     test_csv_row = {'iam-username': 'FooBar'}
-    two_days_ago, two_months_ago = utils.utcnow() - timedelta(days=2), utils.utcnow() - timedelta(days=28*2)
+    two_days_ago, two_months_ago = utils.utcnow() - timedelta(days=2), utils.utcnow() - timedelta(days=28 * 2)
     max_key_age, grace_period = 90, 7
     key_list = [
         {'access_key_id': 'AKIA-DUMMY1', 'create_date': two_days_ago, 'status': 'Inactive'},
@@ -145,7 +143,7 @@ def test_execute_user_report():
     actions = [('delete', 'AKIA-DUMMY1'), ('disable', 'AKIA-DUMMY2'), ('create', 'new')]
     test_user_report = {
         'iam-username': 'FooBar',
-        #'success?': True, 'state': 'ideal', 'reason': '...', # unnecessary to execute report
+        # 'success?': True, 'state': 'ideal', 'reason': '...', # unnecessary to execute report
         'actions': actions
     }
 
@@ -178,7 +176,7 @@ def test_create_user_gist():
 
     expected = test_user_result.copy()
     expected.update(mock_gist)
-        
+
     assert expected == result
 
 #
@@ -198,6 +196,22 @@ def test_email_user__new_credentials():
         result = main.email_user__new_credentials(test_user_result)
     assert 'email-sent' in result
 
+def test_email_user__old_credentials_disabled():
+    test_user_result = {
+        'name': 'Pants', 'email': 'foo@example.org',
+        'grace-period-days': 7,
+
+        'actions': [
+            ("disable", "AKIA-NOTAKEYASDF")
+        ],
+        'results': {
+            'disable': True
+        }
+    }
+    with patch('src.main.send_email'):
+        result = main.email_user__old_credentials_disabled(test_user_result)
+    assert 'disabled-email-sent' in result
+
 #
 #
 #
@@ -213,4 +227,3 @@ def test_bad_rows_bad_email():
     with pytest.raises(AssertionError) as err:
         main.read_input(fixture)
     assert str(err.value).startswith("bad-value: email doesn't look like an email to me")
-
