@@ -40,3 +40,9 @@ def lossy_json_dumps(obj, **kwargs):
             return obj.isoformat()
         return '[unserializable]'
     return json.dumps(obj, default=json_handler, **kwargs)
+
+def select_keys(d, key_list):
+    return [val for key, val in d.items() if key in key_list]
+
+def keys(d):
+    return list(d.keys())
