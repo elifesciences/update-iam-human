@@ -1,5 +1,5 @@
 '''
-some very rough code for deleting inactive credentials in bulk. 
+some very rough code for deleting inactive credentials in bulk.
 
 read the code before executing it, then do: $ python -m src.rm_inactive
 '''
@@ -41,7 +41,7 @@ def pp(x):
 def delete_key(key):
     print('deleting key', key)
     key['-obj'].delete()
-    
+
 def main():
     resp = get_all_users()
     user_list = resp[0]['Users']

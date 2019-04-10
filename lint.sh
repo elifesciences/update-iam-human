@@ -21,4 +21,6 @@ pylint -E ./src/ --disable=E1103 2> /dev/null
 pylint ./src/ --disable=all --reports=n --score=n \
     --enable=redefined-builtin
 
+. .scrub.sh
+
 echo "[✓] .lint.sh"
