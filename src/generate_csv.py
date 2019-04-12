@@ -42,7 +42,8 @@ def generate_credential_report():
     while True:
         sys.stdout.write('polling ... ')
         resp = iam.generate_credential_report()
-        if resp not in ['STARTED', 'INPROGRESS']:
+        # only three possible states. the other is 'STARTED'
+        if resp['State'] not in ['STARTED', 'INPROGRESS']:
             print('done.')
             break
         time.sleep(2) # seconds
