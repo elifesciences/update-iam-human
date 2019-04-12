@@ -1,14 +1,42 @@
 # update-iam-human
 
-A script designed to rotate IAM credentials.
+A script to rotate IAM credentials for human beings.
 
 ## Usage:
 
+1. Generate a CSV file of human beings:
+
+    $ ./generate-csv.sh
+
+This will generate a set of CSV files that are partitions of the AWS credentials report.
+
+The one we need is called `humans.csv` and has just three columns: `name`, `iam-username` and `email`. 
+
+This file is used to send emails to those users. 
+
+The `name` and `email` columns will need to be filled out if they can't be filled from an existing `humans.csv` file.
+
+See `example.csv`.
+
+2. Generate a plan of action
+
     $ ./update-iam.sh csv-file
 
-The `csv-file` should have the columns `name`, `email`, `iam-username`. See `example.csv`.
+This generates a list of actions to be performed and writes the plan to `$csvfile-report-$datestamp.json`.
 
-After execution a report will be written in the form of `inputfname-report.json`.
+For example, `humans-report-2019-01-01.json` typically.
+
+Review the actions.
+
+Do not modify the file, it will be regenerated on execution.
+
+3. Execute the plan of action.
+
+    $ ./update-iam.sh csv-file --execute
+
+After execution a report will be written in the form of `$csvfile-results-$datestamp.json`.
+
+For example, `humans-results-2019-01-01.json` typically.
 
 An example report:
 
