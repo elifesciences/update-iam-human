@@ -4,7 +4,7 @@ A script to rotate IAM credentials for human beings.
 
 ## Usage:
 
-1. Generate a CSV file of human beings:
+### 1. Generate a CSV file of human beings:
 
     $ ./generate-csv.sh
 
@@ -18,7 +18,7 @@ The `name` and `email` columns will need to be filled out if they can't be fille
 
 See `example.csv`.
 
-2. Generate a plan of action
+### 2. Generate a plan of action
 
     $ ./update-iam.sh csv-file
 
@@ -30,7 +30,7 @@ Review the actions.
 
 Do not modify the file, it will be regenerated on execution.
 
-3. Execute the plan of action.
+### 3. Execute the plan of action.
 
     $ ./update-iam.sh csv-file --execute
 
