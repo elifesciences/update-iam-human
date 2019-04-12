@@ -51,9 +51,9 @@ def generate_credential_report():
     resp = iam.get_credential_report()
     ensure(resp['ResponseMetadata']['HTTPStatusCode'] == 200, "failed to download credential report. final response: %s" % resp)
     ensure(resp['ReportFormat'] == 'text/csv', "unexpected report format %r. final response: %s" % (resp['ReportFormat'], resp))
-    filename = 'aws-credentials-report.private.csv'
+    filename = 'private/aws-credentials-report.csv'
     open(filename, 'wb').write(resp['Content'])
-    print("wrote 'aws-credentials-report.private.csv'")
+    print("wrote %r" % filename)
     return filename
 
 def target_humans(path_to_credentials_report):
@@ -74,14 +74,15 @@ def target_humans(path_to_credentials_report):
     probable_humans, machines = splitfilter(lambda row: row['user'] in exceptions or num_uppercase(row['user']) >= 2, rest_of_report)
 
     report_list = [
-        (no_access_users, 'no-access-users-needing-review.private.csv'),
-        (probable_humans, 'humans.private.csv'),
-        (machines, 'machines.private.csv')
+        (no_access_users, 'private/no-access-users-needing-review.csv'),
+        (probable_humans, 'private/humans.csv'),
+        (machines, 'private/machines.csv')
     ]
     for rows, filename in report_list:
         dump_csv(filename, rows)
         print("wrote %r" % filename)
 
 if __name__ == "__main__":
+    os.system("mkdir -p private")
     credentials = generate_credential_report()
     target_humans(credentials)
