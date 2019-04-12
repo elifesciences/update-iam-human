@@ -24,9 +24,9 @@ See `example.csv`.
 
 This generates a list of actions to be performed and writes the plan to `$csvfile-report-$datestamp.json`.
 
-For example, `humans-report-2019-01-01.json` typically.
+For example, `humans-report-2019-01-01.json`
 
-Review the actions.
+Review the actions to be taken.
 
 Do not modify the file, it will be regenerated on execution.
 
@@ -36,7 +36,7 @@ Do not modify the file, it will be regenerated on execution.
 
 After execution a report will be written in the form of `$csvfile-results-$datestamp.json`.
 
-For example, `humans-results-2019-01-01.json` typically.
+For example, `humans-results-2019-01-01.json`
 
 An example report:
 
