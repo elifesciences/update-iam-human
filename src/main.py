@@ -1,3 +1,4 @@
+import argparse
 import boto3
 import sys, os, csv
 from github import Github
@@ -354,17 +355,18 @@ def notify(report_results):
     results = lmap(email_user__new_credentials, users_w_gists)
     return {'notified': results, 'unnotified': unnotified}
 
-def write_report(user_csvpath, passes, fails):
+def write_report(user_csvpath, passes, fails, executed):
     report = {'passes': passes, 'fails': fails}
+    type_of_content = 'results' if executed else 'report'
     path = os.path.splitext(os.path.basename(user_csvpath))[0]
-    path = '%s-report-%s.json' % (path, ymd(utcnow()))
+    path = '%s-%s-%s.json' % (path, type_of_content, ymd(utcnow())) # "humans-results-2019-01-01.json"
     data = utils.lossy_json_dumps(report, indent=4)
     print(data)
     with open(path, 'w') as fh:
         fh.write(data)
     return path
 
-def main(user_csvpath, max_key_age=MAX_KEY_AGE_DAYS, grace_period_days=GRACE_PERIOD_DAYS):
+def main(user_csvpath, max_key_age=MAX_KEY_AGE_DAYS, grace_period_days=GRACE_PERIOD_DAYS, execute=False):
     csv_contents = read_input(user_csvpath)
     max_key_age, grace_period_days = lmap(int, [max_key_age, grace_period_days])
     print('querying %s users ...' % len(csv_contents))
@@ -385,21 +387,23 @@ def main(user_csvpath, max_key_age=MAX_KEY_AGE_DAYS, grace_period_days=GRACE_PER
         print()
         return 1
 
-    results = execute_report(pass_rows)
+    if execute:
+        results = execute_report(pass_rows)
+        results = notify(results)
 
-    results = notify(results)
-
-    print('wrote: ', write_report(user_csvpath, results, fail_rows))
+    print('wrote: ', write_report(user_csvpath, results, fail_rows, execute))
 
     return 0
 
 if __name__ == '__main__':
     try:
         ensure(os.path.exists(GH_CREDENTIALS_FILE), "no github credentials found: %s" % GH_CREDENTIALS_FILE)
-        args = sys.argv[1:]
-        arglst = ['user_csvpath', 'max_key_age', 'grace_period_days']
-        ensure(len(args) > 0, "at least one argument required: path-to-csvfile")
-        kwargs = dict(zip(arglst, args))
+        parser = argparse.ArgumentParser()
+        parser.add_argument('user_csvpath')
+        parser.add_argument('--execute', default=False, action='store_true')
+        parser.add_argument('--max-key-age', default=MAX_KEY_AGE_DAYS)
+        parser.add_argument('--grace-period-days', default=GRACE_PERIOD_DAYS)
+        kwargs = parser.parse_args().__dict__ # "{'user_csvpath': 'example.csv', 'execute': False, 'max_key_age': 180, 'grace_period_days': 7}"
         sys.exit(main(**kwargs))
     except AssertionError as err:
         print('err:', err)
