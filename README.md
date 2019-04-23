@@ -30,6 +30,12 @@ Review the actions to be taken.
 
 Do not modify the file, it will be regenerated on execution.
 
+For credential rotations that earlier than default rotation age (180 days), specify a `--max-key-age`:
+
+For example, to rotate *all* credentials *now*, do:
+
+    $ ./update-iam.sh csv-file --max-key-age=0
+
 ### 3. Execute the plan of action.
 
     $ ./update-iam.sh csv-file --execute

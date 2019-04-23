@@ -1,3 +1,4 @@
+import getpass
 import argparse
 import boto3
 import sys, os, csv
@@ -40,6 +41,13 @@ STATE_DESCRIPTIONS = {
     UNKNOWN: "credentials are in an unhandled state (program error)"
 }
 
+def current_user():
+    # username => signature
+    mapping = {
+        'luke': 'Luke Skibinski',
+        'giorgio': 'Giorgio Sironi'
+    }
+    return mapping[getpass.getuser()]
 
 #
 # aws IAM
@@ -296,11 +304,21 @@ The grace period for updating your AWS credentials is over and "{insert-disabled
 
 You can find your new credentials linked to in our previous email.
 
-Please contact it-admin@elifesciences.org if you have any problems.'''
+Please contact it-admin@elifesciences.org if you have any problems.
+
+---
+
+This email is not spam, is not a scam and if you have *any* doubts whatsoever about it's authenticity,
+please contact someone in the IT team first.
+
+This email was generated {todays-date} by {author} using this program: 
+https://github.com/elifesciences/update-iam-human'''
     content = content.format_map({
         'insert-name-of-human': user_csvrow['name'],
         'insert-disabled-credential-key': disabled_credential_key,
         'insert-grace-period': user_csvrow['grace-period-days'],
+        'todays-date': ymd(utcnow()),
+        'author': current_user()
     })
     print('sending email %r to %s (%s)' % (subject, user_csvrow['name'], to_addr))
     result = send_email(to_addr, subject, content)
@@ -325,11 +343,21 @@ old credentials will be removed after the grace period ({insert-expiry-date}).
 Your new set of credentials can be found here:
 {insert-gist-url}
 
-Please contact it-admin@elifesciences.org if you have any problems.'''
+Please contact it-admin@elifesciences.org if you have any problems.
+
+---
+
+This email is not spam, is not a scam and if you have *any* doubts whatsoever about it's authenticity,
+please contact someone in the IT team first.
+
+This email was generated {todays-date} by {author} using this program: 
+https://github.com/elifesciences/update-iam-human'''
     content = content.format_map({
         'insert-name-of-human': user_csvrow['name'],
         'insert-expiry-date': ymd(utcnow() + timedelta(days=user_csvrow['grace-period-days'])),
-        'insert-gist-url': user_csvrow['gist-html-url']
+        'insert-gist-url': user_csvrow['gist-html-url'],
+        'todays-date': ymd(utcnow()),
+        'author': current_user()
     })
     print('sending email to %s (%s)' % (user_csvrow['name'], to_addr))
     result = send_email(to_addr, subject, content)
@@ -377,15 +405,7 @@ def main(user_csvpath, max_key_age=MAX_KEY_AGE_DAYS, grace_period_days=GRACE_PER
         # nothing to do
         return len(fail_rows)
 
-    try:
-        print(utils.lossy_json_dumps(pass_rows, indent=4))
-        print('execute actions? (ctrl-c to quit)')
-        uin = input('> ')
-        if uin and uin.lower().startswith('n'):
-            raise KeyboardInterrupt()
-    except KeyboardInterrupt:
-        print()
-        return 1
+    print(utils.lossy_json_dumps(pass_rows, indent=4))
 
     if execute:
         results = execute_report(pass_rows)
