@@ -247,7 +247,7 @@ def gh_create_user_gist(user_csvrow):
 
 Your new AWS credentials are:
 
-aws_access_key={insert-access-key}
+aws_access_key_id={insert-access-key}
 aws_secret_access_key={insert-secret-key}
 
 Your old credentials and this message will expire on {insert-expiry-date}.'''
