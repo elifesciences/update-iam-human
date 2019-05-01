@@ -311,7 +311,7 @@ Please contact it-admin@elifesciences.org if you have any problems.
 This email is not spam, is not a scam and if you have *any* doubts whatsoever about it's authenticity,
 please contact someone in the IT team first.
 
-This email was generated {todays-date} by {author} using this program: 
+This email was generated {todays-date} by {author} using this program:
 https://github.com/elifesciences/update-iam-human'''
     content = content.format_map({
         'insert-name-of-human': user_csvrow['name'],
@@ -350,7 +350,7 @@ Please contact it-admin@elifesciences.org if you have any problems.
 This email is not spam, is not a scam and if you have *any* doubts whatsoever about it's authenticity,
 please contact someone in the IT team first.
 
-This email was generated {todays-date} by {author} using this program: 
+This email was generated {todays-date} by {author} using this program:
 https://github.com/elifesciences/update-iam-human'''
     content = content.format_map({
         'insert-name-of-human': user_csvrow['name'],
