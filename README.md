@@ -30,11 +30,16 @@ Review the actions to be taken.
 
 Do not modify the file, it will be regenerated on execution.
 
-For credential rotations that earlier than default rotation age (180 days), specify a `--max-key-age`:
+When credentials must be rotated earlier than the default rotation age (180 days), specify a `--max-key-age`.
 
 For example, to rotate *all* credentials *now*, do:
 
     $ ./update-iam.sh csv-file --max-key-age=0
+
+To force the rotation of credentials that are mid-transition (the grace period hasn't expired yet and two sets of 
+credentials exist), a shorter grace period can be set:
+
+    $ ./update-iam.sh csv-file --grace-period=0
 
 ### 3. Execute the plan of action.
 
@@ -43,76 +48,6 @@ For example, to rotate *all* credentials *now*, do:
 After execution a report will be written in the form of `$csvfile-results-$datestamp.json`.
 
 For example, `humans-results-2019-01-01.json`
-
-An example report:
-
-```json
-{
-    "passes": {
-        "notified": [
-            {
-                "name": "John Doe",
-                "email": "j.doe@example.org",
-                "iam-username": "dummyuser1",
-                "grace-period-days": 7,
-                "max-key-age": 90,
-                "success?": true,
-                "state": "old-credentials",
-                "reason": "credentials are old and will be rotated",
-                "actions": [
-                    [
-                        "create",
-                        "new"
-                    ]
-                ],
-                "results": {
-                    "create": {
-                        "aws-access-key": "AKIAASDFFDSA",
-                        "aws-secret-key": "[redacted]"
-                    }
-                },
-                "gist-html-url": "[redacted]",
-                "gist-id": "03f45a234f2452a345f345243",
-                "gist-created-at": "2001-01-01",
-                "email-id": "8d9f89asd8fa98d9a8dfa9sd",
-                "email-sent": "2001-01-01",
-            },
-        ],
-        "unnotified": [
-            {
-                "name": "John Doe",
-                "email": "j.doe@example.org",
-                "iam-username": "dummyuser2",
-                "grace-period-days": 7,
-                "max-key-age": 90,
-                "success?": true,
-                "state": "ideal",
-                "reason": "1 active set of credentials younger than max age of credentials",
-                "actions": [
-                    [
-                        "delete",
-                        "AKIAIFDSASDASDSA"
-                    ]
-                ],
-                "results": {
-                    "delete": true
-                }
-            }
-        ]
-    },
-    "fails": [
-        {
-            "name": "John Doe",
-            "email": "j.doe@example.org",
-            "iam-username": "NonExistantUser1",
-            "success?": false,
-            "state": "no-credentials",
-            "reason": "no credentials exist",
-            "actions": []
-        }
-    ]
-}
-```
 
 ## Requirements
 
