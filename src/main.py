@@ -405,13 +405,12 @@ def main(user_csvpath, max_key_age=MAX_KEY_AGE_DAYS, grace_period_days=GRACE_PER
         # nothing to do
         return len(fail_rows)
 
-    print(utils.lossy_json_dumps(pass_rows, indent=4))
-
     if execute:
         results = execute_report(pass_rows)
         results = notify(results)
-
-    print('wrote: ', write_report(user_csvpath, results, fail_rows, execute))
+        print('wrote: ', write_report(user_csvpath, results, fail_rows, execute))
+    else:
+        print('wrote: ', write_report(user_csvpath, pass_rows, fail_rows, execute))
 
     return 0
 
