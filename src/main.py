@@ -430,7 +430,7 @@ if __name__ == '__main__':
         parser.add_argument('--execute', default=False, action='store_true')
         parser.add_argument('--max-key-age', default=MAX_KEY_AGE_DAYS)
         parser.add_argument('--grace-period-days', default=GRACE_PERIOD_DAYS)
-        kwargs = parser.parse_args().__dict__ # "{'user_csvpath': 'example.csv', 'execute': False, 'max_key_age': 180, 'grace_period_days': 7}"
+        kwargs = parser.parse_args().__dict__ # {'user_csvpath': 'example.csv', 'execute': False, 'max_key_age': 180, 'grace_period_days': 7}
         sys.exit(main(**kwargs))
     except AssertionError as err:
         print('err:', err)
