@@ -110,7 +110,7 @@ def user_report(user_csvrow, max_key_age, grace_period_days):
         access_keys = key_list(user_csvrow['iam-username'])
         ensure(access_keys is not None, USER_NOT_FOUND)
 
-        ensure(len(access_keys) > 0, NO_CREDENTIALS)
+        #ensure(len(access_keys) > 0, NO_CREDENTIALS)
         ensure(len(access_keys) < 3, MANY_CREDENTIALS) # there must only ever be 0, 1 or 2 keys
 
         # carry some state around with us for future ops
@@ -124,7 +124,15 @@ def user_report(user_csvrow, max_key_age, grace_period_days):
         # always prune inactive keys
         [actions.append(('delete', key['access_key_id'])) for key in inactive_keys]
 
-        if len(active_keys) > 1:
+        if len(access_keys) == 0:
+            # users with no credentials should have been filtered out in generate_csv.py
+            # this is useful for when we're targeting those who didn't update or are brand new
+            state = NO_CREDENTIALS
+            actions += [
+                ('create', 'new')
+            ]
+
+        elif len(active_keys) > 1:
             # we have two active keys
             # * user is possibly using both sets, which is no longer supported, or
             # * user was granted a new set of credentials by this script
