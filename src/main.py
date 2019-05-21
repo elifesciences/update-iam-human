@@ -258,7 +258,7 @@ Your new AWS credentials are:
 aws_access_key_id={insert-access-key}
 aws_secret_access_key={insert-secret-key}
 
-Your old credentials and this message will expire on {insert-expiry-date}.'''
+Your old credentials (if any) and this message will expire on {insert-expiry-date}.'''
 
     new_key = user_csvrow['results']['create']
     content = content.format_map({
