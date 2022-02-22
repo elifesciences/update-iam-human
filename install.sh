@@ -1,6 +1,5 @@
 #!/bin/bash
-set -e # everything must succeed.
-echo "[-] install.sh"
+set -e
 
 . mkvenv.sh
 
@@ -14,5 +13,3 @@ else
     # normal case
     pip install -r requirements.txt.lock
 fi
-
-echo "[✓] install.sh"

@@ -89,8 +89,8 @@ def partition_report(path_to_credentials_report):
         print("wrote %r" % filename)
 
 def generate_humans_file(humans_csv):
-    """using the list of humans derived from the credentials report, create a three column csv file for use as input to `update_iam_human.main`
-    re-uses an existing humans.csv file if found"""
+    """using the list of humans derived from the credentials report, create a three column csv file for use as input to `update_iam_human.main`.
+    re-uses an existing humans.csv file if found."""
     outfile = "private/humans.csv"
 
     # this file may be old, contain partial information or non-existant

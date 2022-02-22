@@ -1,6 +1,8 @@
 # update-iam-human
 
-A script to rotate IAM credentials for human beings.
+A script to rotate IAM credentials of human beings.
+
+1. using a list of human beings, 
 
 ## Usage:
 
@@ -8,13 +10,15 @@ A script to rotate IAM credentials for human beings.
 
     $ ./generate-csv.sh
 
-This will generate a set of CSV files that are partitions of the AWS credentials report.
+This will generate a set of CSV files using the results of the AWS credentials report.
 
 The one we need is called `humans.csv` and has just three columns: `name`, `iam-username` and `email`. 
 
-This file is used to send emails to those users. 
+This file is used to send emails to those users.
 
-The `name` and `email` columns will need to be filled out if they can't be filled from an existing `humans.csv` file.
+The `name` and `email` columns **must be** filled.
+
+Copying the `humans.csv` file from it-admin into `private` will save some time filling in missing names and emails.
 
 See `example.csv`.
 
@@ -28,7 +32,7 @@ For example, `humans-report-2019-01-01.json`
 
 Review the actions to be taken.
 
-Do not modify the file, it will be regenerated on execution.
+Do not modify the file, it will be regenerated on execution. Instead, modify AWS IAM and `humans.csv` if necessary and re-run `update-iam.sh`.
 
 When credentials must be rotated earlier than the default rotation age (180 days), specify a `--max-key-age`.
 
@@ -48,6 +52,14 @@ credentials exist), a shorter grace period can be set:
 After execution a report will be written in the form of `$csvfile-results-$datestamp.json`.
 
 For example, `humans-results-2019-01-01.json`
+
+
+## missing features
+
+`update-iam-human` does *not*:
+
+* notify a user when credentials are disabled
+* delete the generated Github Gists as users update their credentials
 
 ## Requirements
 

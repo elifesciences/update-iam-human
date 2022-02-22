@@ -1,14 +1,14 @@
 "creates a temporary csv file for a single user and feeds it to update-iam-human script"
 
 import csv, tempfile
-from . import main as update_iam_human
+from . import main
 import argparse
 
 def prompt(field):
     uin = input("%s: " % field)
     return uin
 
-def main(execute=False):
+def cli_main(execute=False, **kwargs):
     field_names = ['name', 'email', 'iam-username']
     try:
         with tempfile.NamedTemporaryFile('w+') as csv_path:
@@ -20,7 +20,7 @@ def main(execute=False):
             writer.writerow(row)
 
             csv_path.seek(0)
-            update_iam_human.main(csv_path.name, execute=execute)
+            main.main(csv_path.name, execute=execute, **kwargs)
 
     except KeyboardInterrupt:
         print('ctrl-c caught, quitting')
@@ -28,5 +28,7 @@ def main(execute=False):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--execute', default=False, action='store_true')
+    parser.add_argument('--max-key-age', default=main.MAX_KEY_AGE_DAYS)
+    parser.add_argument('--grace-period-days', default=main.GRACE_PERIOD_DAYS)
     kwargs = parser.parse_args().__dict__ # {'execute': False}
-    main(**kwargs)
+    cli_main(**kwargs)

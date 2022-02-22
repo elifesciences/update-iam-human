@@ -42,7 +42,7 @@ STATE_DESCRIPTIONS = {
 }
 
 def current_user():
-    # username => signature
+    "OS username => email signature"
     mapping = {
         'luke': 'Luke Skibinski',
         'giorgio': 'Giorgio Sironi'

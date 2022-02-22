@@ -3,10 +3,10 @@ set -e
 
 # update_iam_human requires 3.6+ , *depends on dict maintaining order*
 python=''
-pybinlist=("python3.6", "python3.7") # use ascending order.
+pybinlist=("python3.6" "python3.8") # use ascending order.
 
 for pybin in ${pybinlist[*]}; do
-    which "$pybin" &> /dev/null || continue
+    hash "$pybin" || continue
     python=$pybin
     break
 done
