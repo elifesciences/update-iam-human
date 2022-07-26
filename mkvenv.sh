@@ -1,9 +1,9 @@
 #!/bin/bash
 set -e
 
-# update_iam_human requires 3.6+ , *depends on dict maintaining order*
+# update_iam_human requires Python 3.6+ with *dictionaries maintaining insertion order*
 python=''
-pybinlist=("python3.6" "python3.8") # use ascending order.
+pybinlist=("python3.8" "python3") # use ascending order.
 
 for pybin in ${pybinlist[*]}; do
     hash "$pybin" || continue
