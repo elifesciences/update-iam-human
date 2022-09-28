@@ -3,6 +3,5 @@ venv/
 .pyc
 __pycache__/
 .pytest_cache/
-private.json
 *-report.json
 private/
