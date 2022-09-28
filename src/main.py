@@ -226,16 +226,15 @@ def execute_report(report_data):
 # github gist
 #
 
-# ll: {'key': 'github-api-token'}
-GH_CREDENTIALS_FILE = os.path.abspath("private.json")
-
 def gh_credentials():
-    return json.load(open(GH_CREDENTIALS_FILE, 'r'))
+    path = os.environ.get('GH_CREDENTIALS_FILE')
+    if path and os.path.isfile(path):
+        path = os.path.abspath(os.path.expanduser(path))
+        return open(path, 'r').read().strip()
 
 def gh_user():
     "returns a user that can create gists"
-    credentials = gh_credentials()
-    gh = Github(credentials['key'])
+    gh = Github(gh_credentials())
     return gh.get_user()
 
 def create_gist(description, content):
@@ -424,7 +423,7 @@ def main(user_csvpath, max_key_age=MAX_KEY_AGE_DAYS, grace_period_days=GRACE_PER
 
 if __name__ == '__main__':
     try:
-        ensure(os.path.exists(GH_CREDENTIALS_FILE), "no github credentials found: %s" % GH_CREDENTIALS_FILE)
+        ensure(gh_credentials(), "no github credentials found.")
         parser = argparse.ArgumentParser()
         parser.add_argument('user_csvpath')
         parser.add_argument('--execute', default=False, action='store_true')
