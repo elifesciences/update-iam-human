@@ -15,7 +15,7 @@ def cli_main(execute=False, **kwargs):
             writer = csv.writer(csv_path, field_names)
             writer.writerow(field_names)
 
-            #row = ['Luke Test', 'l.skibinski@elifesciences.org', 'LukeTest']
+            #row = ['Fname Lname', 'f.lname@elifesciences.org', 'FnameLname']
             row = list(map(prompt, field_names))
             writer.writerow(row)
 
