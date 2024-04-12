@@ -44,7 +44,6 @@ STATE_DESCRIPTIONS = {
 def current_user():
     "OS username => email signature"
     mapping = {
-        'luke': 'Luke Skibinski',
         'giorgio': 'Giorgio Sironi'
     }
     return mapping[getpass.getuser()]
